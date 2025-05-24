@@ -13,6 +13,7 @@ type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 	Proxy  ProxyConfig  `mapstructure:"proxy"`
 	Log    LogConfig    `mapstructure:"log"`
+	Alist  AlistConfig  `mapstructure:"alist"`
 }
 
 // ServerConfig 保存服务器配置
@@ -23,8 +24,23 @@ type ServerConfig struct {
 
 // ProxyConfig 保存代理配置
 type ProxyConfig struct {
-	URL    string `mapstructure:"url"`     // 代理目标 URL
-	APIKey string `mapstructure:"api_key"` // API 密钥
+	URL         string `mapstructure:"url"`          // 代理目标 URL
+	APIKey      string `mapstructure:"api_key"`      // API 密钥
+	CacheTime   int    `mapstructure:"cache_time"`   // 缓存直链时间，单位：小时
+	AddMetadata bool   `mapstructure:"add_metadata"` // 补充元数据
+	Method      string `mapstructure:"method"`       // alist, 115open
+	Paths       []Path `mapstructure:"paths"`        // 路径映射
+}
+
+type Path struct {
+	Old string `mapstructure:"old"`
+	New string `mapstructure:"new"`
+}
+
+type AlistConfig struct {
+	URL    string `mapstructure:"url"`
+	APIKey string `mapstructure:"api_key"`
+	Sign   bool   `mapstructure:"sign"`
 }
 
 // LogConfig 保存日志配置
@@ -93,14 +109,15 @@ func setDefaults() {
 	// 代理默认值
 	viper.SetDefault("proxy.url", "")
 	viper.SetDefault("proxy.api_key", "")
+	viper.SetDefault("proxy.cache_time", 1) // 缓存直链时间，单位：小时
 
 	// 日志默认值
 	viper.SetDefault("log.level", "info")
 	viper.SetDefault("log.format", "text")
 	viper.SetDefault("log.output", "file")
 	viper.SetDefault("log.file_path", "logs/app.log")
-	viper.SetDefault("log.max_size", 100)    // 100MB
-	viper.SetDefault("log.max_backups", 0)   // 不限制备份数量
-	viper.SetDefault("log.max_age", 7)       // 7天
-	viper.SetDefault("log.compress", true)   // 压缩旧文件
+	viper.SetDefault("log.max_size", 100)  // 100MB
+	viper.SetDefault("log.max_backups", 0) // 不限制备份数量
+	viper.SetDefault("log.max_age", 7)     // 7天
+	viper.SetDefault("log.compress", true) // 压缩旧文件
 }

@@ -6,7 +6,6 @@ import (
 
 	"cinexus/internal/config"
 	"cinexus/internal/logger"
-	"cinexus/internal/server/middleware"
 	"cinexus/internal/server/routes"
 
 	"github.com/labstack/echo/v4"
@@ -73,7 +72,7 @@ func (s *Server) setupMiddleware() {
 	s.echo.Use(echomiddleware.RequestID())
 
 	// 自定义日志中间件
-	s.echo.Use(middleware.Logger(s.logger))
+	// s.echo.Use(middleware.Logger(s.logger))
 
 	// 请求超时中间件
 	// s.echo.Use(echomiddleware.TimeoutWithConfig(echomiddleware.TimeoutConfig{
