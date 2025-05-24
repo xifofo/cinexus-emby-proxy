@@ -1,0 +1,49 @@
+# Git 相关
+.git
+.gitignore
+
+# 构建产物
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试相关
+*.test
+*.out
+coverage.txt
+
+# 开发工具
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志文件
+logs/*.log
+logs/*.gz
+
+# 临时文件
+*.tmp
+*.temp
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# README 和文档（可选，如果不需要在容器中可以排除）
+README.md
+*.md
+
+# Docker 相关
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 配置文件（保留 example 文件，实际配置文件通过挂载提供）
+config.yaml

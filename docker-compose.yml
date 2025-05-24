@@ -1,0 +1,20 @@
+services:
+  cinexus-emby-proxy:
+    image: kumayi/cinexus-emby-proxy:beta
+    container_name: cinexus-emby-proxy
+    restart: unless-stopped
+    ports:
+      - "9096:9096"
+    volumes:
+      # 挂载配置文件
+      - ./config.yaml:/app/config.yaml:ro
+      # 挂载日志目录到主机，方便查看和备份
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - cinexus-network
+
+networks:
+  cinexus-network:
+    driver: bridge
