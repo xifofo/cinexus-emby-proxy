@@ -1,0 +1,17 @@
+server:
+  port: "9096"
+  mode: "release"  # debug, release
+
+proxy:
+  url: "http://your-emby-server:8096"
+  api_key: "your_emby_api_key_here"
+
+log:
+  level: "info"        # debug, info, warn, error
+  format: "text"       # json, text
+  output: "file"       # stdout, file
+  file_path: "logs/app.log"
+  max_size: 100        # MB
+  max_backups: 0       # 0 means no limit
+  max_age: 7           # days
+  compress: true       # compress old log files
