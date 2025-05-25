@@ -7,12 +7,13 @@ proxy:
   api_key: "your_emby_api_key_here"
   cache_time: 1 # 缓存直链时间，单位：小时
   add_metadata: true # 补充元数据
-  method: "alist" # alist, 115open
+  method: "alist" # alist, 115open（TODO: 115open 直链功能未实现）
   # 路径映射，用于将 Emby 的原始路径映射到代理的实际路径
   paths:
     - old: "/vol1/1000/CloudNAS/CloudDrive/115"
       new: "/115"
 
+# 使用 alist 直链时，需要配置以下参数
 alist:
   url: "http://127.0.0.1:5244"
   api_key: "your_alist_api_key_here"

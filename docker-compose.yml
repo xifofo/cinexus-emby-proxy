@@ -13,8 +13,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
     networks:
-      - cinexus-network
+      - cinexus-emby-proxy-network
 
 networks:
-  cinexus-network:
+  cinexus-emby-proxy-network:
     driver: bridge

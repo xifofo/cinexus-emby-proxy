@@ -85,6 +85,10 @@ func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config,
 		return redirectURL, false
 	}
 
+	if cfg.Proxy.Method == "115open" {
+
+	}
+
 	log.Warnln("不支持的代理方法")
 	return "", true
 }
