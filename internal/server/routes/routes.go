@@ -72,10 +72,12 @@ func Playing(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config, l
 	c.Request().Body = io.NopCloser(bytes.NewReader(recorder.Body.Bytes()))
 
 	if err := json.Unmarshal(recorder.Body.Bytes(), &startInfo); err == nil {
-		_, err := GETPlaybackInfo(startInfo.ItemId, cfg)
-		if err != nil {
-			log.Warnln("补充媒体信息失败了")
-		}
+		go func() {
+			_, err := GETPlaybackInfo(startInfo.ItemId, cfg)
+			if err != nil {
+				log.Warnln("补充媒体信息失败了")
+			}
+		}()
 	}
 
 	// 代理请求
