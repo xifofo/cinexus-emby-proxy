@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	driver115 "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/labstack/echo/v4"
@@ -35,6 +36,17 @@ func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config,
 		return "", true
 	}
 
+	// 开始计时
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		log.Infof("【EMBY PROXY】ProxyPlay 执行时间: %v", duration)
+	}()
+
+	return proxyPlayInternal(c, proxy, cfg, log)
+}
+
+func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config, log *logger.Logger) (string, bool) {
 	itemInfoUri, itemId, etag, mediaSourceId, apiKey := helper.GetItemPathInfo(c, cfg)
 	embyRes, err := helper.GetEmbyItems(itemInfoUri, itemId, etag, mediaSourceId, apiKey)
 
