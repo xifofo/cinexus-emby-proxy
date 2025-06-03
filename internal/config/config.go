@@ -10,10 +10,11 @@ import (
 
 // Config 保存应用程序的所有配置
 type Config struct {
-	Server ServerConfig `mapstructure:"server"`
-	Proxy  ProxyConfig  `mapstructure:"proxy"`
-	Log    LogConfig    `mapstructure:"log"`
-	Alist  AlistConfig  `mapstructure:"alist"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Proxy     ProxyConfig     `mapstructure:"proxy"`
+	Log       LogConfig       `mapstructure:"log"`
+	Alist     AlistConfig     `mapstructure:"alist"`
+	Driver115 Driver115Config `mapstructure:"driver115"`
 }
 
 // ServerConfig 保存服务器配置
@@ -33,8 +34,9 @@ type ProxyConfig struct {
 }
 
 type Path struct {
-	Old string `mapstructure:"old"`
-	New string `mapstructure:"new"`
+	Old  string `mapstructure:"old"`
+	New  string `mapstructure:"new"`
+	Real string `mapstructure:"real"`
 }
 
 type AlistConfig struct {
@@ -53,6 +55,10 @@ type LogConfig struct {
 	MaxBackups int    `mapstructure:"max_backups"` // 要保留的旧日志文件的最大数量
 	MaxAge     int    `mapstructure:"max_age"`     // 保留的最大天数
 	Compress   bool   `mapstructure:"compress"`    // 是否压缩旧日志文件
+}
+
+type Driver115Config struct {
+	Cookie string `mapstructure:"cookie"`
 }
 
 // Load 从各种来源加载配置

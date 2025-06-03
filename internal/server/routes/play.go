@@ -5,12 +5,17 @@ import (
 	"cinexus/internal/helper"
 	"cinexus/internal/helper/alist"
 	"cinexus/internal/logger"
+	"cinexus/internal/storage"
+	"context"
 	"fmt"
 	"net/http/httputil"
+	"path/filepath"
 	"regexp"
 	"strings"
 
+	driver115 "github.com/SheltonZhu/115driver/pkg/driver"
 	"github.com/labstack/echo/v4"
+	sdk115 "github.com/xhofe/115-sdk-go"
 )
 
 func IsPlayURI(uri string) bool {
@@ -59,9 +64,10 @@ func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config,
 	// 匹配 embyPlayPath 是否在 cfg.Proxy.Paths 中，如果存在，则替换为 cfg.Proxy.Paths 中的 new
 	// 不存在 old 开头的说明不需要代理
 	needProxy := false
+	matchPathConfig := config.Path{}
 	for _, path := range cfg.Proxy.Paths {
 		if strings.HasPrefix(embyPlayPath, path.Old) {
-			embyPlayPath = strings.Replace(embyPlayPath, path.Old, path.New, 1)
+			matchPathConfig = path
 			needProxy = true
 			break
 		}
@@ -71,9 +77,16 @@ func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config,
 		return "", true
 	}
 
-	// userAgent := strings.ToLower(c.Request().Header.Get("User-Agent"))
+	// TODO 优先从数据库里获取 pickcode
+
 	if cfg.Proxy.Method == "alist" {
+		embyPlayPath = strings.Replace(embyPlayPath, matchPathConfig.Old, matchPathConfig.New, 1)
+
 		return GetAlistRedirectURL(embyPlayPath, log, cfg, originalHeaders)
+	}
+
+	if cfg.Proxy.Method == "ck+115open" || cfg.Proxy.Method == "ck" {
+		return CKAnd115Open(c, embyPlayPath, log, cfg, originalHeaders, matchPathConfig)
 	}
 
 	log.Warnln("不支持的代理方法")
@@ -98,4 +111,96 @@ func GetAlistRedirectURL(alistPath string, log *logger.Logger, cfg *config.Confi
 	}
 
 	return redirectURL, false
+}
+
+// 通过 Cookie + 115open API 的方案。配置了 Alist 之后允许降级到 AList 302 方案
+func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *config.Config, originalHeaders map[string]string, matchPathConfig config.Path) (string, bool) {
+	cr := &driver115.Credential{}
+	embyPlayPath := embyPath
+
+	err := cr.FromCookie(cfg.Driver115.Cookie)
+	if err != nil {
+		log.Errorf("从 Cookie 获取 115 凭证错误: %v", err)
+		// TODO 发起通知
+		// 降级到 AList 302 方案
+		embyPlayPath = strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1)
+
+		return GetAlistRedirectURL(embyPlayPath, log, cfg, originalHeaders)
+	}
+
+	client := driver115.Defalut().ImportCredential(cr)
+
+	// 替换 embyPath 中的 old 为 real 字符串
+	embyRealCloudPlayPath := strings.Replace(embyPlayPath, matchPathConfig.Old, matchPathConfig.Real, 1)
+
+	fileName := filepath.Base(embyRealCloudPlayPath)
+	dirPath := filepath.Dir(embyRealCloudPlayPath)
+
+	dirRes, err := client.DirName2CID(dirPath)
+	if err != nil {
+		log.Errorf("获取目录 CID 错误: %v", err)
+		return "", true
+	}
+
+	dirID := string(dirRes.CategoryID)
+
+	files, _ := client.ListWithLimit(dirID, 1150)
+
+	pickcode := ""
+	for _, file := range *files {
+		if file.Name == fileName {
+			pickcode = file.PickCode
+			break
+		}
+	}
+
+	if pickcode == "" {
+		log.Printf("找不到文件 %s 降级到 AList 302 方案", fileName)
+		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
+	}
+
+	if cfg.Proxy.Method == "ck" {
+		downloadInfo, err := client.DownloadWithUA(pickcode, c.Request().UserAgent())
+		if err == nil {
+			log.Infof("CK 方案成功，使用 CDN 地址：%s", downloadInfo.Url.Url)
+			return downloadInfo.Url.Url, false
+		}
+
+		log.Printf("CK 方案失败，获取 CDN 地址失败：%e", err)
+		log.Infof("CK 方案失败，降级到 115Open 方案")
+	}
+
+	token115, err := storage.ReadTokens()
+	if err != nil {
+		log.Errorf("读取 115 凭证错误: %v", err)
+		return "", true
+	}
+
+	// 使用 OpenApi 去获取下载地址
+	sdkClient := sdk115.New(sdk115.WithRefreshToken(token115.RefreshToken),
+		sdk115.WithAccessToken(token115.AccessToken),
+		sdk115.WithOnRefreshToken(func(s1, s2 string) {
+			storage.UpdateTokens(s2, s1)
+		}))
+
+	downloadUrlResp, err := sdkClient.DownURL(context.Background(), pickcode, c.Request().UserAgent())
+	if err != nil {
+		log.Errorf("115Open 方案失败，降级到 AList 302 方案，获取下载地址失败: %v", err)
+		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
+	}
+
+	var firstKey string
+	for key := range downloadUrlResp {
+		firstKey = key
+		break
+	}
+
+	u, ok := downloadUrlResp[firstKey]
+	if !ok {
+		log.Infof("115Open 方案失败，降级到 AList 302 方案")
+		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
+	}
+
+	log.Infof("115Open 方案成功，使用 CDN 地址：%s", u.URL.URL)
+	return u.URL.URL, false
 }

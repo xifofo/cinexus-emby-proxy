@@ -39,7 +39,6 @@ func Setup(e *echo.Echo, cfg *config.Config, log *logger.Logger) {
 		}
 
 		if cacheLink, found := goCache.Get(cacheKey); found {
-			log.Infof("命中缓存： %s", cacheLink)
 			return c.Redirect(302, cacheLink.(string))
 		}
 

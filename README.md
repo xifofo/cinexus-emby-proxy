@@ -32,7 +32,7 @@ proxy:
 alist:
   url: "http://127.0.0.1:5244"
   api_key: "your_alist_api_key_here"
-  sign: true  # Alist 是否使用签名
+  sign: true # Alist 是否使用签名
 
 log:
   level: "info" # debug, info, warn, error
@@ -78,3 +78,9 @@ docker compose down
 #### 环境变量
 
 - `TZ=Asia/Shanghai` - 设置时区
+
+### 重定向方案
+
+#### 1. ck+115open
+
+> 利用 Cookie + 115open API 的方案。配置了 Alist 之后会降级到 AList 302 方案

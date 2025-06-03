@@ -1,9 +1,12 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -15,13 +18,112 @@ type Token115 struct {
 }
 
 var (
-	DataDir   = "/data"
+	DataDir   = "./data"
 	TokenFile = "115_tokens.json"
+	// 全局互斥锁，保护同一进程内的并发访问
+	tokenMutex sync.Mutex
+	// 文件锁超时时间
+	FileLockTimeout = 30 * time.Second
 )
 
 // getTokenPath 获取完整的 token 文件路径
 func getTokenPath() string {
 	return DataDir + "/" + TokenFile
+}
+
+// getLockPath 获取锁文件路径
+func getLockPath() string {
+	return DataDir + "/" + TokenFile + ".lock"
+}
+
+// acquireFileLock 获取文件锁，防止跨进程并发修改（带超时）
+func acquireFileLock() (*os.File, error) {
+	// 如果超时时间为0，使用非阻塞模式
+	if FileLockTimeout == 0 {
+		return acquireFileLockNonBlocking()
+	}
+	// 否则使用带超时的阻塞模式
+	return acquireFileLockWithTimeout(FileLockTimeout)
+}
+
+// acquireFileLockWithTimeout 获取文件锁，带自定义超时时间
+func acquireFileLockWithTimeout(timeout time.Duration) (*os.File, error) {
+	// 确保数据目录存在
+	if err := EnsureDataDir(); err != nil {
+		return nil, fmt.Errorf("创建数据目录失败: %w", err)
+	}
+
+	lockFile, err := os.OpenFile(getLockPath(), os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("创建锁文件失败: %w", err)
+	}
+
+	// 使用带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// 在单独的协程中尝试获取锁
+	lockChan := make(chan error, 1)
+	go func() {
+		// 尝试获取独占锁（阻塞模式）
+		err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX)
+		lockChan <- err
+	}()
+
+	// 等待锁获取成功或超时
+	select {
+	case err := <-lockChan:
+		if err != nil {
+			lockFile.Close()
+			return nil, fmt.Errorf("获取文件锁失败: %w", err)
+		}
+		return lockFile, nil
+	case <-ctx.Done():
+		// 超时，尝试关闭文件并返回错误
+		lockFile.Close()
+		return nil, fmt.Errorf("获取文件锁超时 (等待了 %v)，可能有其他进程正在使用", timeout)
+	}
+}
+
+// acquireFileLockNonBlocking 非阻塞方式获取文件锁
+func acquireFileLockNonBlocking() (*os.File, error) {
+	// 确保数据目录存在
+	if err := EnsureDataDir(); err != nil {
+		return nil, fmt.Errorf("创建数据目录失败: %w", err)
+	}
+
+	lockFile, err := os.OpenFile(getLockPath(), os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("创建锁文件失败: %w", err)
+	}
+
+	// 尝试获取非阻塞锁
+	err = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		lockFile.Close()
+		if err == syscall.EWOULDBLOCK || err == syscall.EAGAIN {
+			return nil, fmt.Errorf("文件锁被占用，其他进程正在修改 tokens")
+		}
+		return nil, fmt.Errorf("获取文件锁失败: %w", err)
+	}
+
+	return lockFile, nil
+}
+
+// releaseFileLock 释放文件锁
+func releaseFileLock(lockFile *os.File) error {
+	if lockFile == nil {
+		return nil
+	}
+
+	// 释放锁
+	err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+	if err != nil {
+		lockFile.Close()
+		return fmt.Errorf("释放文件锁失败: %w", err)
+	}
+
+	return lockFile.Close()
 }
 
 // EnsureDataDir 确保 /data 目录存在
@@ -60,8 +162,23 @@ func ReadTokens() (*Token115, error) {
 	return &tokens, nil
 }
 
-// WriteTokens 将 115 tokens 写入 JSON 文件
+// WriteTokens 将 115 tokens 写入 JSON 文件（带锁保护）
 func WriteTokens(refreshToken, accessToken string) error {
+	// 获取进程内锁
+	tokenMutex.Lock()
+	defer tokenMutex.Unlock()
+
+	// 获取文件锁
+	lockFile, err := acquireFileLock()
+	if err != nil {
+		return fmt.Errorf("获取文件锁失败: %w", err)
+	}
+	defer func() {
+		if releaseErr := releaseFileLock(lockFile); releaseErr != nil {
+			fmt.Printf("警告: 释放文件锁失败: %v\n", releaseErr)
+		}
+	}()
+
 	// 确保数据目录存在
 	if err := EnsureDataDir(); err != nil {
 		return fmt.Errorf("创建数据目录失败: %w", err)
@@ -88,8 +205,23 @@ func WriteTokens(refreshToken, accessToken string) error {
 	return nil
 }
 
-// UpdateTokens 更新现有的 tokens，只更新非空值
+// UpdateTokens 更新现有的 tokens，只更新非空值（带锁保护）
 func UpdateTokens(refreshToken, accessToken string) error {
+	// 获取进程内锁
+	tokenMutex.Lock()
+	defer tokenMutex.Unlock()
+
+	// 获取文件锁
+	lockFile, err := acquireFileLock()
+	if err != nil {
+		return fmt.Errorf("获取文件锁失败: %w", err)
+	}
+	defer func() {
+		if releaseErr := releaseFileLock(lockFile); releaseErr != nil {
+			fmt.Printf("警告: 释放文件锁失败: %v\n", releaseErr)
+		}
+	}()
+
 	// 先读取现有的 tokens
 	existingTokens, err := ReadTokens()
 	if err != nil {
