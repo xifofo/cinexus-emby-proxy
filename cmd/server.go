@@ -52,15 +52,18 @@ func runServer() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Info("正在关闭服务器...")
+	log.Info("收到关闭信号，正在关闭服务器...")
 
 	// 上下文用于通知服务器它有 10 秒时间完成当前正在处理的请求
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	log.Info("正在停止HTTP服务器...")
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("服务器强制关闭: %v", err)
+		log.Errorf("服务器关闭过程中发生错误: %v", err)
+		log.Info("强制关闭服务器...")
+		os.Exit(1)
 	}
 
-	log.Info("服务器已退出")
+	log.Info("服务器已成功退出")
 }

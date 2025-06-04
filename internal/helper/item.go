@@ -93,6 +93,7 @@ func GetEmbyItems(itemInfoUri string, itemId string, etag string, mediaSourceId 
 	}
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
+
 	var result map[string]any
 
 	err = json.Unmarshal(bodyBytes, &result)

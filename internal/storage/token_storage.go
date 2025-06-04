@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"syscall"
@@ -17,14 +18,27 @@ type Token115 struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// TokenRefresher 接口，用于检查是否正在刷新
+type TokenRefresher interface {
+	IsRefreshing() bool
+	WaitForRefreshComplete()
+}
+
 var (
 	DataDir   = "./data"
 	TokenFile = "115_tokens.json"
 	// 全局互斥锁，保护同一进程内的并发访问
 	tokenMutex sync.Mutex
-	// 文件锁超时时间
-	FileLockTimeout = 30 * time.Second
+	// 文件锁超时时间 - 缩短超时时间以避免长时间阻塞
+	FileLockTimeout = 5 * time.Second
+	// 全局token刷新器引用
+	globalRefresher TokenRefresher
 )
+
+// SetTokenRefresher 设置全局token刷新器
+func SetTokenRefresher(refresher TokenRefresher) {
+	globalRefresher = refresher
+}
 
 // getTokenPath 获取完整的 token 文件路径
 func getTokenPath() string {
@@ -34,6 +48,17 @@ func getTokenPath() string {
 // getLockPath 获取锁文件路径
 func getLockPath() string {
 	return DataDir + "/" + TokenFile + ".lock"
+}
+
+// waitForRefreshIfNeeded 如果正在刷新，等待刷新完成
+func waitForRefreshIfNeeded() {
+	if globalRefresher != nil && globalRefresher.IsRefreshing() {
+		log.Println("检测到正在进行token刷新，等待刷新完成...")
+		startTime := time.Now()
+		globalRefresher.WaitForRefreshComplete()
+		duration := time.Since(startTime)
+		log.Printf("token刷新等待完成，耗时: %v", duration)
+	}
 }
 
 // acquireFileLock 获取文件锁，防止跨进程并发修改（带超时）
@@ -134,8 +159,8 @@ func EnsureDataDir() error {
 	return nil
 }
 
-// ReadTokens 从 JSON 文件读取 115 tokens
-func ReadTokens() (*Token115, error) {
+// readTokensInternal 内部读取函数，不等待刷新完成，用于避免死锁
+func readTokensInternal() (*Token115, error) {
 	// 确保数据目录存在
 	if err := EnsureDataDir(); err != nil {
 		return nil, fmt.Errorf("创建数据目录失败: %w", err)
@@ -160,6 +185,19 @@ func ReadTokens() (*Token115, error) {
 	}
 
 	return &tokens, nil
+}
+
+// ReadTokens 从 JSON 文件读取 115 tokens
+func ReadTokens() (*Token115, error) {
+	// 如果正在刷新，等待刷新完成
+	waitForRefreshIfNeeded()
+
+	return readTokensInternal()
+}
+
+// ReadTokensForRefresh 专门用于刷新过程中读取token，不等待刷新完成
+func ReadTokensForRefresh() (*Token115, error) {
+	return readTokensInternal()
 }
 
 // WriteTokens 将 115 tokens 写入 JSON 文件（带锁保护）
@@ -222,8 +260,8 @@ func UpdateTokens(refreshToken, accessToken string) error {
 		}
 	}()
 
-	// 先读取现有的 tokens
-	existingTokens, err := ReadTokens()
+	// 先读取现有的 tokens（使用内部方法，避免死锁）
+	existingTokens, err := readTokensInternal()
 	if err != nil {
 		return fmt.Errorf("读取现有 tokens 失败: %w", err)
 	}
@@ -282,6 +320,16 @@ func IsTokenValid(maxAge time.Duration) (bool, error) {
 // GetTokens 获取当前的 tokens
 func GetTokens() (refreshToken, accessToken string, updatedAt time.Time, err error) {
 	tokens, err := ReadTokens()
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	return tokens.RefreshToken, tokens.AccessToken, tokens.UpdatedAt, nil
+}
+
+// GetTokensForRefresh 专门用于刷新过程中获取token，不等待刷新完成
+func GetTokensForRefresh() (refreshToken, accessToken string, updatedAt time.Time, err error) {
+	tokens, err := ReadTokensForRefresh()
 	if err != nil {
 		return "", "", time.Time{}, err
 	}

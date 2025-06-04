@@ -3,10 +3,13 @@ package server
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"cinexus/internal/config"
 	"cinexus/internal/logger"
 	"cinexus/internal/server/routes"
+	"cinexus/internal/storage"
+	"cinexus/internal/tokenrefresher"
 
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
@@ -14,9 +17,10 @@ import (
 
 // Server 表示 HTTP 服务器
 type Server struct {
-	echo   *echo.Echo
-	config *config.Config
-	logger *logger.Logger
+	echo           *echo.Echo
+	config         *config.Config
+	logger         *logger.Logger
+	tokenRefresher *tokenrefresher.TokenRefresher
 }
 
 // New 创建新的服务器实例
@@ -39,7 +43,28 @@ func New(cfg *config.Config, log *logger.Logger) *Server {
 	// 设置路由
 	s.setupRoutes()
 
+	// 初始化并启动token刷新器
+	s.setupTokenRefresher()
+
 	return s
+}
+
+// setupTokenRefresher 设置token刷新器
+func (s *Server) setupTokenRefresher() {
+	// 创建token刷新器配置
+	refresherConfig := tokenrefresher.Config{
+		CheckInterval: 2 * time.Minute,  // 每10分钟检查一次
+		MaxAge:        80 * time.Minute, // token有效期1小时20分钟
+	}
+
+	// 创建token刷新器
+	s.tokenRefresher = tokenrefresher.New(s.logger, refresherConfig)
+
+	// 设置全局token刷新器引用
+	storage.SetTokenRefresher(s.tokenRefresher)
+
+	// 启动token刷新器
+	s.tokenRefresher.Start()
 }
 
 // setupEcho 配置 echo 实例
@@ -126,5 +151,22 @@ func (s *Server) Start(address string) error {
 
 // Shutdown 优雅地关闭服务器
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.echo.Shutdown(ctx)
+	s.logger.Info("🔄 开始关闭服务器组件...")
+
+	// 停止token刷新器
+	if s.tokenRefresher != nil {
+		s.logger.Info("🛑 正在停止token刷新器...")
+		s.tokenRefresher.Stop()
+		s.logger.Info("✅ token刷新器已停止")
+	}
+
+	s.logger.Info("🛑 正在关闭HTTP服务器...")
+	err := s.echo.Shutdown(ctx)
+	if err != nil {
+		s.logger.Errorf("❌ HTTP服务器关闭失败: %v", err)
+		return err
+	}
+
+	s.logger.Info("✅ HTTP服务器已关闭")
+	return nil
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"cinexus/internal/storage"
 
 	"github.com/spf13/cobra"
+	sdk115 "github.com/xhofe/115-sdk-go"
 )
 
 // tokenCmd 表示 token 命令
@@ -126,6 +128,28 @@ var showTokenCmd = &cobra.Command{
 	},
 }
 
+// refreshTokenCmd 表示 refresh 子命令
+var refreshTokenCmd = &cobra.Command{
+	Use:   "refresh",
+	Short: "手动刷新 115 tokens",
+	Long: `手动刷新 115 tokens。
+使用当前的 refresh_token 获取新的 access_token 和 refresh_token。`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// 设置锁行为
+		if err := configureLockBehavior(cmd); err != nil {
+			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := refreshTokens(); err != nil {
+			fmt.Fprintf(os.Stderr, "错误: 刷新 tokens 失败: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("✅ Tokens 刷新成功!")
+	},
+}
+
 // configureLockBehavior 根据命令行参数配置锁行为
 func configureLockBehavior(cmd *cobra.Command) error {
 	// 检查是否设置了超时时间
@@ -158,6 +182,45 @@ func maskToken(token string) string {
 	return token[:4] + "****" + token[len(token)-4:]
 }
 
+// refreshTokens 执行token刷新逻辑
+func refreshTokens() error {
+	// 读取当前token
+	tokens, err := storage.ReadTokensForRefresh()
+	if err != nil {
+		return fmt.Errorf("读取当前token失败: %w", err)
+	}
+
+	if tokens.RefreshToken == "" {
+		return fmt.Errorf("RefreshToken为空，无法刷新")
+	}
+
+	fmt.Printf("🔄 开始刷新115 token...\n")
+	fmt.Printf("   当前 Refresh Token: %s\n", maskToken(tokens.RefreshToken))
+	fmt.Printf("   当前 Access Token: %s\n", maskToken(tokens.AccessToken))
+
+	// 创建115 SDK客户端
+	client := sdk115.New(
+		sdk115.WithRefreshToken(tokens.RefreshToken),
+		sdk115.WithAccessToken(tokens.AccessToken),
+	)
+
+	// 使用RefreshToken方法刷新
+	newTokens, err := client.RefreshToken(context.Background())
+	if err != nil {
+		return fmt.Errorf("调用RefreshToken失败: %w", err)
+	}
+
+	// 保存新的tokens
+	if err := storage.UpdateTokens(newTokens.RefreshToken, newTokens.AccessToken); err != nil {
+		return fmt.Errorf("保存新token失败: %w", err)
+	}
+
+	fmt.Printf("✅ 新 Refresh Token: %s\n", maskToken(newTokens.RefreshToken))
+	fmt.Printf("✅ 新 Access Token: %s\n", maskToken(newTokens.AccessToken))
+
+	return nil
+}
+
 func init() {
 	// 将 token 命令添加到根命令
 	rootCmd.AddCommand(tokenCmd)
@@ -166,9 +229,10 @@ func init() {
 	tokenCmd.AddCommand(setTokenCmd)
 	tokenCmd.AddCommand(writeTokenCmd)
 	tokenCmd.AddCommand(showTokenCmd)
+	tokenCmd.AddCommand(refreshTokenCmd)
 
 	// 为所有需要写入的命令添加锁行为标志
-	for _, cmd := range []*cobra.Command{setTokenCmd, writeTokenCmd} {
+	for _, cmd := range []*cobra.Command{setTokenCmd, writeTokenCmd, refreshTokenCmd} {
 		cmd.Flags().StringP("refresh-token", "r", "", "设置 refresh token")
 		cmd.Flags().StringP("access-token", "a", "", "设置 access token")
 		cmd.Flags().String("lock-timeout", "30s", "文件锁超时时间 (例如: 30s, 1m, 5m)")
@@ -178,4 +242,8 @@ func init() {
 	// 为 write 命令的帮助信息更新
 	writeTokenCmd.Flags().Lookup("refresh-token").Usage = "设置 refresh token (必需)"
 	writeTokenCmd.Flags().Lookup("access-token").Usage = "设置 access token (必需)"
+
+	// refresh命令不需要这些标志
+	refreshTokenCmd.Flags().Lookup("refresh-token").Hidden = true
+	refreshTokenCmd.Flags().Lookup("access-token").Hidden = true
 }

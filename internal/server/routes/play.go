@@ -47,13 +47,18 @@ func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config,
 }
 
 func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config, log *logger.Logger) (string, bool) {
-	itemInfoUri, itemId, etag, mediaSourceId, apiKey := helper.GetItemPathInfo(c, cfg)
-	embyRes, err := helper.GetEmbyItems(itemInfoUri, itemId, etag, mediaSourceId, apiKey)
+	stepStart := time.Now()
 
+	itemInfoUri, itemId, etag, mediaSourceId, apiKey := helper.GetItemPathInfo(c, cfg)
+	log.Debugf("【EMBY PROXY】步骤1 - 解析请求参数耗时: %v", time.Since(stepStart))
+
+	stepStart = time.Now()
+	embyRes, err := helper.GetEmbyItems(itemInfoUri, itemId, etag, mediaSourceId, apiKey)
 	if err != nil {
 		log.Errorf("获取 EmbyItems 错误: %v", err)
 		return "", true
 	}
+	log.Debugf("【EMBY PROXY】步骤2 - 获取EmbyItems耗时: %v", time.Since(stepStart))
 
 	// EMBY 的播放地址
 	embyPlayPath := embyRes.Path
@@ -61,6 +66,7 @@ func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config
 	// log.Infof("【EMBY PROXY】Request URI: %s", currentURI)
 	log.Infof("【EMBY PROXY】Emby 原地址: %s", embyPlayPath)
 
+	stepStart = time.Now()
 	originalHeaders := make(map[string]string)
 	for key, value := range c.Request().Header {
 		if len(value) > 0 {
@@ -70,6 +76,7 @@ func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config
 
 	// 判断 embyPlayPath 是否是 alist url，如果是进行代理
 	if strings.HasPrefix(embyPlayPath, cfg.Alist.URL) {
+		log.Debugf("【EMBY PROXY】步骤3 - 检测为Alist路径，准备处理耗时: %v", time.Since(stepStart))
 		return GetAlistRedirectURL(embyPlayPath, log, cfg, originalHeaders)
 	}
 
@@ -86,8 +93,11 @@ func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config
 	}
 
 	if !needProxy {
+		log.Debugf("【EMBY PROXY】步骤3 - 路径匹配检查，无需代理耗时: %v", time.Since(stepStart))
 		return "", true
 	}
+
+	log.Debugf("【EMBY PROXY】步骤3 - 路径匹配检查耗时: %v", time.Since(stepStart))
 
 	// TODO 优先从数据库里获取 pickcode
 
@@ -107,6 +117,8 @@ func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config
 
 // 通过 Alist 链接直接获取 302 重定向地址
 func GetAlistRedirectURL(alistPath string, log *logger.Logger, cfg *config.Config, originalHeaders map[string]string) (string, bool) {
+	stepStart := time.Now()
+
 	alistUrl := fmt.Sprintf("%s/d%s", cfg.Alist.URL, alistPath)
 	if strings.HasPrefix(alistPath, cfg.Alist.URL) {
 		alistUrl = alistPath
@@ -115,8 +127,11 @@ func GetAlistRedirectURL(alistPath string, log *logger.Logger, cfg *config.Confi
 	if cfg.Alist.Sign {
 		alistUrl = fmt.Sprintf("%s?sign=%s", alistUrl, alist.Sign(alistPath, 0, cfg.Alist.APIKey))
 	}
+	log.Debugf("【EMBY PROXY】Alist URL构建耗时: %v", time.Since(stepStart))
 
+	stepStart = time.Now()
 	redirectURL, err := alist.GetRedirectURL(alistUrl, originalHeaders)
+	log.Debugf("【EMBY PROXY】Alist获取重定向URL耗时: %v", time.Since(stepStart))
 	if err != nil {
 		log.Errorf("获取 Alist 重定向 URL 错误: %v", err)
 		return "", true
@@ -127,6 +142,8 @@ func GetAlistRedirectURL(alistPath string, log *logger.Logger, cfg *config.Confi
 
 // 通过 Cookie + 115open API 的方案。配置了 Alist 之后允许降级到 AList 302 方案
 func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *config.Config, originalHeaders map[string]string, matchPathConfig config.Path) (string, bool) {
+	stepStart := time.Now()
+
 	cr := &driver115.Credential{}
 	embyPlayPath := embyPath
 
@@ -139,8 +156,11 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 
 		return GetAlistRedirectURL(embyPlayPath, log, cfg, originalHeaders)
 	}
+	log.Debugf("【EMBY PROXY】步骤4 - 创建115凭证耗时: %v", time.Since(stepStart))
 
+	stepStart = time.Now()
 	client := driver115.Defalut().ImportCredential(cr)
+	log.Debugf("【EMBY PROXY】步骤5 - 初始化115客户端耗时: %v", time.Since(stepStart))
 
 	// 替换 embyPath 中的 old 为 real 字符串
 	embyRealCloudPlayPath := strings.Replace(embyPlayPath, matchPathConfig.Old, matchPathConfig.Real, 1)
@@ -148,16 +168,21 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	fileName := filepath.Base(embyRealCloudPlayPath)
 	dirPath := filepath.Dir(embyRealCloudPlayPath)
 
+	stepStart = time.Now()
 	dirRes, err := client.DirName2CID(dirPath)
 	if err != nil {
 		log.Errorf("获取目录 CID 错误: %v", err)
 		return "", true
 	}
+	log.Debugf("【EMBY PROXY】步骤6 - 获取目录CID耗时: %v", time.Since(stepStart))
 
 	dirID := string(dirRes.CategoryID)
 
+	stepStart = time.Now()
 	files, _ := client.ListWithLimit(dirID, 1150)
+	log.Debugf("【EMBY PROXY】步骤7 - 列出目录文件耗时: %v", time.Since(stepStart))
 
+	stepStart = time.Now()
 	pickcode := ""
 	for _, file := range *files {
 		if file.Name == fileName {
@@ -165,6 +190,7 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 			break
 		}
 	}
+	log.Debugf("【EMBY PROXY】步骤8 - 查找文件pickcode耗时: %v", time.Since(stepStart))
 
 	if pickcode == "" {
 		log.Printf("找不到文件 %s 降级到 AList 302 方案", fileName)
@@ -172,7 +198,9 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	}
 
 	if cfg.Proxy.Method == "ck" {
+		stepStart = time.Now()
 		downloadInfo, err := client.DownloadWithUA(pickcode, c.Request().UserAgent())
+		log.Debugf("【EMBY PROXY】步骤9 - CK方案获取下载地址耗时: %v", time.Since(stepStart))
 		if err == nil {
 			log.Infof("CK 方案成功，使用 CDN 地址：%s", downloadInfo.Url.Url)
 			return downloadInfo.Url.Url, false
@@ -185,17 +213,18 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	token115, err := storage.ReadTokens()
 	if err != nil {
 		log.Errorf("读取 115 凭证错误: %v", err)
-		return "", true
 	}
 
-	// 使用 OpenApi 去获取下载地址
-	sdkClient := sdk115.New(sdk115.WithRefreshToken(token115.RefreshToken),
+	sdk115Client := sdk115.New(sdk115.WithRefreshToken(token115.RefreshToken),
 		sdk115.WithAccessToken(token115.AccessToken),
 		sdk115.WithOnRefreshToken(func(s1, s2 string) {
 			storage.UpdateTokens(s2, s1)
 		}))
 
-	downloadUrlResp, err := sdkClient.DownURL(context.Background(), pickcode, c.Request().UserAgent())
+	// 使用 OpenApi 去获取下载地址
+	stepStart = time.Now()
+	downloadUrlResp, err := sdk115Client.DownURL(context.Background(), pickcode, c.Request().UserAgent())
+	log.Debugf("【EMBY PROXY】步骤10 - 115Open方案获取下载地址耗时: %v", time.Since(stepStart))
 	if err != nil {
 		log.Errorf("115Open 方案失败，降级到 AList 302 方案，获取下载地址失败: %v", err)
 		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)

@@ -16,7 +16,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/patrickmn/go-cache"
-	// open115sdk "github.com/xhofe/115-sdk-go"
 )
 
 // Setup 配置所有应用程序路由
@@ -24,8 +23,6 @@ func Setup(e *echo.Echo, cfg *config.Config, log *logger.Logger) {
 	goCache := cache.New(time.Duration(cfg.Proxy.CacheTime)*time.Hour, 1*time.Minute)
 	embyURL, _ := url.Parse(cfg.Proxy.URL)
 	proxy := httputil.NewSingleHostReverseProxy(embyURL)
-
-	// open115sdk.NewClient()
 
 	e.Any("/*actions", func(c echo.Context) error {
 		currentURI := c.Request().RequestURI
