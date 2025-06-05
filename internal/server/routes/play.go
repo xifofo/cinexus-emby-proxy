@@ -168,29 +168,85 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	fileName := filepath.Base(embyRealCloudPlayPath)
 	dirPath := filepath.Dir(embyRealCloudPlayPath)
 
-	stepStart = time.Now()
-	dirRes, err := client.DirName2CID(dirPath)
-	if err != nil {
-		log.Errorf("获取目录 CID 错误: %v", err)
-		return "", true
-	}
-	log.Debugf("【EMBY PROXY】步骤6 - 获取目录CID耗时: %v", time.Since(stepStart))
-
-	dirID := string(dirRes.CategoryID)
-
-	stepStart = time.Now()
-	files, _ := client.ListWithLimit(dirID, 1150)
-	log.Debugf("【EMBY PROXY】步骤7 - 列出目录文件耗时: %v", time.Since(stepStart))
-
+	// 优先从数据库里获取 pickcode
 	stepStart = time.Now()
 	pickcode := ""
-	for _, file := range *files {
-		if file.Name == fileName {
-			pickcode = file.PickCode
-			break
+	if cfg.Proxy.CachePickcode {
+		if cachedPickcode, found := storage.GetPickcodeFromCache(embyRealCloudPlayPath); found {
+			pickcode = cachedPickcode
+			log.Debugf("【EMBY PROXY】步骤6a - 从缓存获取pickcode成功耗时: %v", time.Since(stepStart))
+			log.Infof("【EMBY PROXY】从缓存命中 pickcode: %s -> %s", fileName, pickcode)
+		} else {
+			log.Debugf("【EMBY PROXY】步骤6a - 缓存中未找到pickcode耗时: %v", time.Since(stepStart))
 		}
 	}
-	log.Debugf("【EMBY PROXY】步骤8 - 查找文件pickcode耗时: %v", time.Since(stepStart))
+
+	// 如果缓存中没有找到，从115API获取
+	if pickcode == "" {
+		stepStart = time.Now()
+		dirRes, err := client.DirName2CID(dirPath)
+		if err != nil {
+			log.Errorf("获取目录 CID 错误: %v", err)
+			return "", true
+		}
+		log.Debugf("【EMBY PROXY】步骤6b - 获取目录CID耗时: %v", time.Since(stepStart))
+
+		dirID := string(dirRes.CategoryID)
+
+		stepStart = time.Now()
+		files, _ := client.ListWithLimit(dirID, 1150)
+		log.Debugf("【EMBY PROXY】步骤7 - 列出目录文件耗时: %v", time.Since(stepStart))
+
+		// 如果启用了缓存，异步缓存所有文件的pickcode
+		if cfg.Proxy.CachePickcode && files != nil {
+			go func() {
+				cacheStart := time.Now()
+				cachedCount := 0
+				skippedCount := 0
+
+				for _, file := range *files {
+					// 构建文件的完整路径
+					fullFilePath := filepath.Join(dirPath, file.Name)
+
+					// 检查是否已经缓存，如果已存在就跳过
+					if _, found := storage.GetPickcodeFromCache(fullFilePath); found {
+						skippedCount++
+						continue
+					}
+
+					// 保存到缓存
+					if err := storage.SavePickcodeToCache(fullFilePath, file.PickCode); err != nil {
+						log.Warnf("批量缓存失败 %s: %v", file.Name, err)
+					} else {
+						cachedCount++
+					}
+				}
+
+				log.Infof("【EMBY PROXY】批量缓存完成 - 新缓存: %d, 跳过: %d, 耗时: %v",
+					cachedCount, skippedCount, time.Since(cacheStart))
+			}()
+		}
+
+		stepStart = time.Now()
+		for _, file := range *files {
+			if file.Name == fileName {
+				pickcode = file.PickCode
+				break
+			}
+		}
+		log.Debugf("【EMBY PROXY】步骤8 - 查找文件pickcode耗时: %v", time.Since(stepStart))
+
+		// 如果找到了pickcode且启用了缓存，保存到数据库
+		if pickcode != "" && cfg.Proxy.CachePickcode {
+			stepStart = time.Now()
+			if err := storage.SavePickcodeToCache(embyRealCloudPlayPath, pickcode); err != nil {
+				log.Warnf("保存 pickcode 到缓存失败: %v", err)
+			} else {
+				log.Debugf("【EMBY PROXY】保存pickcode到缓存成功: %s -> %s", fileName, pickcode)
+			}
+			log.Debugf("【EMBY PROXY】步骤9a - 保存pickcode到缓存耗时: %v", time.Since(stepStart))
+		}
+	}
 
 	if pickcode == "" {
 		log.Printf("找不到文件 %s 降级到 AList 302 方案", fileName)
@@ -200,7 +256,7 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	if cfg.Proxy.Method == "ck" {
 		stepStart = time.Now()
 		downloadInfo, err := client.DownloadWithUA(pickcode, c.Request().UserAgent())
-		log.Debugf("【EMBY PROXY】步骤9 - CK方案获取下载地址耗时: %v", time.Since(stepStart))
+		log.Debugf("【EMBY PROXY】步骤10 - CK方案获取下载地址耗时: %v", time.Since(stepStart))
 		if err == nil {
 			log.Infof("CK 方案成功，使用 CDN 地址：%s", downloadInfo.Url.Url)
 			return downloadInfo.Url.Url, false
@@ -224,7 +280,7 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	// 使用 OpenApi 去获取下载地址
 	stepStart = time.Now()
 	downloadUrlResp, err := sdk115Client.DownURL(context.Background(), pickcode, c.Request().UserAgent())
-	log.Debugf("【EMBY PROXY】步骤10 - 115Open方案获取下载地址耗时: %v", time.Since(stepStart))
+	log.Debugf("【EMBY PROXY】步骤11 - 115Open方案获取下载地址耗时: %v", time.Since(stepStart))
 	if err != nil {
 		log.Errorf("115Open 方案失败，降级到 AList 302 方案，获取下载地址失败: %v", err)
 		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)

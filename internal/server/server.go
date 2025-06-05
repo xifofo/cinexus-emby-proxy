@@ -43,10 +43,31 @@ func New(cfg *config.Config, log *logger.Logger) *Server {
 	// 设置路由
 	s.setupRoutes()
 
+	// 初始化pickcode缓存数据库
+	s.setupPickcodeCache()
+
 	// 初始化并启动token刷新器
 	s.setupTokenRefresher()
 
 	return s
+}
+
+// setupPickcodeCache 初始化pickcode缓存数据库
+func (s *Server) setupPickcodeCache() {
+	if s.config.Proxy.CachePickcode {
+		s.logger.Info("🗄️ 正在初始化pickcode缓存数据库...")
+		if err := storage.InitPickcodeDB(); err != nil {
+			s.logger.Errorf("❌ 初始化pickcode缓存数据库失败: %v", err)
+		} else {
+			s.logger.Info("✅ pickcode缓存数据库初始化成功")
+			// 获取并显示缓存统计信息
+			if count, err := storage.GetPickcodeCacheStats(); err == nil {
+				s.logger.Infof("📊 当前缓存中有 %d 个pickcode记录", count)
+			}
+		}
+	} else {
+		s.logger.Info("⚠️ pickcode缓存功能已禁用")
+	}
 }
 
 // setupTokenRefresher 设置token刷新器

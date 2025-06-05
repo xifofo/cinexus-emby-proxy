@@ -25,12 +25,13 @@ type ServerConfig struct {
 
 // ProxyConfig 保存代理配置
 type ProxyConfig struct {
-	URL         string `mapstructure:"url"`          // 代理目标 URL
-	APIKey      string `mapstructure:"api_key"`      // API 密钥
-	CacheTime   int    `mapstructure:"cache_time"`   // 缓存直链时间，单位：小时
-	AddMetadata bool   `mapstructure:"add_metadata"` // 补充元数据
-	Method      string `mapstructure:"method"`       // alist, 115open
-	Paths       []Path `mapstructure:"paths"`        // 路径映射
+	URL           string `mapstructure:"url"`            // 代理目标 URL
+	APIKey        string `mapstructure:"api_key"`        // API 密钥
+	CacheTime     int    `mapstructure:"cache_time"`     // 缓存直链时间，单位：小时
+	CachePickcode bool   `mapstructure:"cache_pickcode"` // 缓存 pickcode 到 sqlite 数据库，提高服务速度
+	AddMetadata   bool   `mapstructure:"add_metadata"`   // 补充元数据
+	Method        string `mapstructure:"method"`         // alist, 115open
+	Paths         []Path `mapstructure:"paths"`          // 路径映射
 }
 
 type Path struct {
@@ -115,7 +116,8 @@ func setDefaults() {
 	// 代理默认值
 	viper.SetDefault("proxy.url", "")
 	viper.SetDefault("proxy.api_key", "")
-	viper.SetDefault("proxy.cache_time", 1) // 缓存直链时间，单位：小时
+	viper.SetDefault("proxy.cache_time", 1)        // 缓存直链时间，单位：小时
+	viper.SetDefault("proxy.cache_pickcode", true) // 默认启用pickcode缓存
 
 	// 日志默认值
 	viper.SetDefault("log.level", "info")
