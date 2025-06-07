@@ -1,15 +1,17 @@
 services:
   cinexus-emby-proxy:
-    image: kumayi/cinexus-emby-proxy:beta
+    image: kumayi/cinexus-emby-proxy:v1.1.2.alpha
     container_name: cinexus-emby-proxy
     restart: unless-stopped
     ports:
       - "9096:9096"
     volumes:
-      # 挂载配置文件
+      # 挂载配置文件（只读）
       - ./config.yaml:/app/config.yaml:ro
       # 挂载日志目录到主机，方便查看和备份
       - ./logs:/app/logs
+      # 挂载数据目录，用于持久化 pickcode 缓存数据库和 115 token
+      - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
     networks:

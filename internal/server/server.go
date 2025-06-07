@@ -75,7 +75,7 @@ func (s *Server) setupTokenRefresher() {
 	// 创建token刷新器配置
 	refresherConfig := tokenrefresher.Config{
 		CheckInterval: 2 * time.Minute,  // 每10分钟检查一次
-		MaxAge:        80 * time.Minute, // token有效期1小时20分钟
+		MaxAge:        90 * time.Minute, // token有效期1小时30分钟
 	}
 
 	// 创建token刷新器

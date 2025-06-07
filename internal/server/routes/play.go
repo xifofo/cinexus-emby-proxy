@@ -60,8 +60,8 @@ func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config
 	}
 	log.Debugf("【EMBY PROXY】步骤2 - 获取EmbyItems耗时: %v", time.Since(stepStart))
 
-	// EMBY 的播放地址
-	embyPlayPath := embyRes.Path
+	// EMBY 的播放地址, 兼容 Windows 的 Emby 路径
+	embyPlayPath := helper.EnsureLeadingSlash(embyRes.Path)
 
 	// log.Infof("【EMBY PROXY】Request URI: %s", currentURI)
 	log.Infof("【EMBY PROXY】Emby 原地址: %s", embyPlayPath)

@@ -27,7 +27,7 @@ type ServerConfig struct {
 type ProxyConfig struct {
 	URL           string `mapstructure:"url"`            // 代理目标 URL
 	APIKey        string `mapstructure:"api_key"`        // API 密钥
-	CacheTime     int    `mapstructure:"cache_time"`     // 缓存直链时间，单位：小时
+	CacheTime     int    `mapstructure:"cache_time"`     // 缓存直链时间，单位：分钟
 	CachePickcode bool   `mapstructure:"cache_pickcode"` // 缓存 pickcode 到 sqlite 数据库，提高服务速度
 	AddMetadata   bool   `mapstructure:"add_metadata"`   // 补充元数据
 	Method        string `mapstructure:"method"`         // alist, 115open

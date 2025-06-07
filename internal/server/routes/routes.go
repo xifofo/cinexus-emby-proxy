@@ -20,7 +20,7 @@ import (
 
 // Setup 配置所有应用程序路由
 func Setup(e *echo.Echo, cfg *config.Config, log *logger.Logger) {
-	goCache := cache.New(time.Duration(cfg.Proxy.CacheTime)*time.Hour, 1*time.Minute)
+	goCache := cache.New(time.Duration(cfg.Proxy.CacheTime)*time.Minute, 1*time.Minute)
 	embyURL, _ := url.Parse(cfg.Proxy.URL)
 	proxy := httputil.NewSingleHostReverseProxy(embyURL)
 
