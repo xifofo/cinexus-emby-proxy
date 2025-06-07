@@ -5,14 +5,15 @@ server:
 proxy:
   url: "http://127.0.0.1:8096"
   api_key: "your_emby_api_key_here"
-  cache_time: 1 # 缓存直链时间，单位：小时
+  cache_time: 1 # 缓存直链时间，单位：分钟
   cache_pickcode: true # 缓存 pickcode 到 sqlite 数据库，提高服务速度
   add_metadata: true # 补充元数据
   # 302 方式说明
   # 1. alist: 通过路径映射替换，直接请求 alist 的直链
   # 2. ck 会降级到 115open 方案，再降级到 alist 方案
   # 3. ck+115open: 通过Cookie快速获取文件PickCode，然后请求115open的直链
-  method: "alist" # alist, ck, ck+115open
+  # 4. 115open: 通过 115open API 的方案
+  method: "alist" # alist, ck, ck+115open, 115open
   # 路径映射，用于将 Emby 的原始路径映射到代理的实际路径
   # real 字符串替换后为真实的网盘路径（用于 ck+115open 方案）
   paths:
