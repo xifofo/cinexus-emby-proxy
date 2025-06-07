@@ -8,6 +8,7 @@ import (
 	"cinexus/internal/storage"
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httputil"
 	"path/filepath"
 	"regexp"
@@ -109,6 +110,10 @@ func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config
 
 	if cfg.Proxy.Method == "ck+115open" || cfg.Proxy.Method == "ck" {
 		return CKAnd115Open(c, embyPlayPath, log, cfg, originalHeaders, matchPathConfig)
+	}
+
+	if cfg.Proxy.Method == "115open" {
+		return Get115OpenRedirectURL(c, embyPlayPath, log, cfg, originalHeaders, matchPathConfig)
 	}
 
 	log.Warnln("不支持的代理方法")
@@ -281,6 +286,56 @@ func CKAnd115Open(c echo.Context, embyPath string, log *logger.Logger, cfg *conf
 	stepStart = time.Now()
 	downloadUrlResp, err := sdk115Client.DownURL(context.Background(), pickcode, c.Request().UserAgent())
 	log.Debugf("【EMBY PROXY】步骤11 - 115Open方案获取下载地址耗时: %v", time.Since(stepStart))
+	if err != nil {
+		log.Errorf("115Open 方案失败，降级到 AList 302 方案，获取下载地址失败: %v", err)
+		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
+	}
+
+	var firstKey string
+	for key := range downloadUrlResp {
+		firstKey = key
+		break
+	}
+
+	u, ok := downloadUrlResp[firstKey]
+	if !ok {
+		log.Infof("115Open 方案失败，降级到 AList 302 方案")
+		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
+	}
+
+	log.Infof("115Open 方案成功，使用 CDN 地址：%s", u.URL.URL)
+	return u.URL.URL, false
+}
+
+// 通过 115open API 的方案
+func Get115OpenRedirectURL(c echo.Context, embyPath string, log *logger.Logger, cfg *config.Config, originalHeaders map[string]string, matchPathConfig config.Path) (string, bool) {
+	embyPlayPath := embyPath
+	// 替换 embyPath 中的 old 为 real 字符串
+	embyRealCloudPlayPath := strings.Replace(embyPlayPath, matchPathConfig.Old, matchPathConfig.Real, 1)
+
+	token115, err := storage.ReadTokens()
+	if err != nil {
+		log.Errorf("读取 115 凭证错误: %v", err)
+	}
+
+	sdk115Client := sdk115.New(sdk115.WithRefreshToken(token115.RefreshToken),
+		sdk115.WithAccessToken(token115.AccessToken),
+		sdk115.WithOnRefreshToken(func(s1, s2 string) {
+			storage.UpdateTokens(s2, s1)
+		}))
+
+	var resp sdk115.GetFolderInfoResp
+
+	sdk115Client.AuthRequest(context.Background(), sdk115.ApiFsGetFolderInfo, http.MethodPost, &resp, sdk115.ReqWithForm(map[string]string{
+		"path": embyRealCloudPlayPath,
+	}))
+
+	if resp.PickCode == "" {
+		log.Errorf("[Get115OpenRedirectURL] 获取 115 文件 PickCode 失败: %v", err)
+		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
+	}
+
+	downloadUrlResp, err := sdk115Client.DownURL(context.Background(), resp.PickCode, c.Request().UserAgent())
 	if err != nil {
 		log.Errorf("115Open 方案失败，降级到 AList 302 方案，获取下载地址失败: %v", err)
 		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
