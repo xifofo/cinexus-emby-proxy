@@ -31,10 +31,6 @@ RUN apk --no-cache add ca-certificates tzdata sqlite bash
 # 设置时区
 ENV TZ=Asia/Shanghai
 
-# 创建非 root 用户
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -u 1001 -S appuser -G appgroup
-
 # 设置工作目录
 WORKDIR /app
 
@@ -43,13 +39,6 @@ COPY --from=builder /app/cinexus .
 
 # 复制配置文件模板
 COPY config.example.yaml ./config.example.yaml
-
-# 创建日志目录
-RUN mkdir -p logs && \
-    chown -R appuser:appgroup /app
-
-# 切换到非 root 用户
-USER appuser
 
 # 启动应用
 CMD ["./cinexus", "server"]
