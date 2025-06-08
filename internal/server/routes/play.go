@@ -29,11 +29,13 @@ func IsPlayURI(uri string) bool {
 
 func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config, log *logger.Logger) (string, bool) {
 	currentURI := c.Request().RequestURI
-	// 暂时移除 master 的匹配
-	re := regexp.MustCompile(`/[Vv]ideos/(\S+)/(stream|original)`)
+	log.Debugf("[EMBY PROXY] ProxyPlay 请求 URI: %s", currentURI)
+
+	re := regexp.MustCompile(`/[Vv]ideos/(\S+)/(stream|original|master)`)
 	matches := re.FindStringSubmatch(currentURI)
 
 	if len(matches) < 1 {
+		log.Debugf("[EMBY PROXY] ProxyPlay 请求 URI 不匹配: %s", currentURI)
 		return "", true
 	}
 
