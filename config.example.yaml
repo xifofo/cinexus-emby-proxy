@@ -5,7 +5,7 @@ server:
 proxy:
   url: "http://127.0.0.1:8096"
   api_key: "your_emby_api_key_here"
-  cache_time: 1 # 缓存直链时间，单位：分钟
+  cache_time: 30 # 缓存直链时间，单位：分钟
   cache_pickcode: true # 缓存 pickcode 到 sqlite 数据库，提高服务速度
   add_metadata: true # 补充元数据
   # 302 方式说明

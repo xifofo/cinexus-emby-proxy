@@ -1,6 +1,6 @@
 services:
   cinexus-emby-proxy:
-    image: kumayi/cinexus-emby-proxy:v1.1.2.alpha
+    image: kumayi/cinexus-emby-proxy:v1.2.1.alpha
     container_name: cinexus-emby-proxy
     restart: unless-stopped
     ports:
