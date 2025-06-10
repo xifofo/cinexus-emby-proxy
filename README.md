@@ -47,6 +47,10 @@ docker compose down
 
 ### 重定向方案
 
-#### 1. ck+115open
+#### 1. 115open
+
+> 115open token 需要通过命令行设置
+
+> 进入 Docker 容器内执行 `./cinexus token set --refresh-token "xxxx" --access-token "xxx"` 设置 Token
 
 > 利用 Cookie + 115open API 的方案。配置了 Alist 之后会降级到 AList 302 方案
