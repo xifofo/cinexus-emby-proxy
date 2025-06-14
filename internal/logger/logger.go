@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"cinexus/internal/config"
 
@@ -50,9 +51,13 @@ func New(cfg config.LogConfig) *Logger {
 			logger.Fatalf("创建日志目录失败: %v", err)
 		}
 
+		// 获取当前日期作为日志文件名的一部分
+		currentDate := time.Now().Format("2006-01-02")
+		logFileName := filepath.Join(logDir, currentDate+".log")
+
 		// 配置 lumberjack 进行日志轮转
 		lumberjackLogger := &lumberjack.Logger{
-			Filename:   cfg.FilePath,
+			Filename:   logFileName,
 			MaxSize:    cfg.MaxSize,    // 兆字节
 			MaxBackups: cfg.MaxBackups, // 备份数量
 			MaxAge:     cfg.MaxAge,     // 天数
@@ -66,6 +71,34 @@ func New(cfg config.LogConfig) *Logger {
 		} else {
 			logger.SetOutput(lumberjackLogger)
 		}
+
+		// 启动定时任务，每天凌晨检查是否需要创建新的日志文件
+		go func() {
+			for {
+				now := time.Now()
+				nextDay := now.AddDate(0, 0, 1)
+				nextDay = time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, nextDay.Location())
+				time.Sleep(nextDay.Sub(now))
+
+				// 创建新的日志文件
+				newDate := time.Now().Format("2006-01-02")
+				newLogFileName := filepath.Join(logDir, newDate+".log")
+				newLumberjackLogger := &lumberjack.Logger{
+					Filename:   newLogFileName,
+					MaxSize:    cfg.MaxSize,
+					MaxBackups: cfg.MaxBackups,
+					MaxAge:     cfg.MaxAge,
+					Compress:   cfg.Compress,
+				}
+
+				if cfg.Level == "debug" {
+					multiWriter := io.MultiWriter(os.Stdout, newLumberjackLogger)
+					logger.SetOutput(multiWriter)
+				} else {
+					logger.SetOutput(newLumberjackLogger)
+				}
+			}
+		}()
 	default:
 		logger.SetOutput(os.Stdout)
 	}
