@@ -25,13 +25,15 @@ type ServerConfig struct {
 
 // ProxyConfig 保存代理配置
 type ProxyConfig struct {
-	URL           string `mapstructure:"url"`            // 代理目标 URL
-	APIKey        string `mapstructure:"api_key"`        // API 密钥
-	CacheTime     int    `mapstructure:"cache_time"`     // 缓存直链时间，单位：分钟
-	CachePickcode bool   `mapstructure:"cache_pickcode"` // 缓存 pickcode 到 sqlite 数据库，提高服务速度
-	AddMetadata   bool   `mapstructure:"add_metadata"`   // 补充元数据
-	Method        string `mapstructure:"method"`         // alist, 115open
-	Paths         []Path `mapstructure:"paths"`          // 路径映射
+	URL              string `mapstructure:"url"`                 // 代理目标 URL
+	APIKey           string `mapstructure:"api_key"`             // API 密钥
+	CacheTime        int    `mapstructure:"cache_time"`          // 缓存直链时间，单位：分钟
+	CachePickcode    bool   `mapstructure:"cache_pickcode"`      // 缓存 pickcode 到 sqlite 数据库，提高服务速度
+	AddMetadata      bool   `mapstructure:"add_metadata"`        // 补充元数据
+	Method           string `mapstructure:"method"`              // alist, 115open
+	Paths            []Path `mapstructure:"paths"`               // 路径映射
+	AdminUserID      string `mapstructure:"admin_user_id"`       // EMBY 管理员用户 ID
+	AddNextMediaInfo bool   `mapstructure:"add_next_media_info"` // 播放时提前获取下一集的媒体信息，提高播放速度
 }
 
 type Path struct {

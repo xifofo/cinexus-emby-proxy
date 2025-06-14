@@ -5,9 +5,12 @@ server:
 proxy:
   url: "http://127.0.0.1:8096"
   api_key: "your_emby_api_key_here"
+  admin_user_id: "your_emby_admin_user_id_here"
   cache_time: 30 # 缓存直链时间，单位：分钟
   cache_pickcode: true # 缓存 pickcode 到 sqlite 数据库，提高服务速度
   add_metadata: true # 补充元数据
+  # 播放时提前获取下一集的媒体信息，提高播放速度， 需要配置 admin_user_id
+  add_next_media_info: true
   # 302 方式说明
   # 1. alist: 通过路径映射替换，直接请求 alist 的直链
   # 2. ck 会降级到 115open 方案，再降级到 alist 方案
