@@ -27,6 +27,7 @@ docker compose logs -f cinexus-emby-proxy
 
 # 停止服务
 docker compose down
+
 ```
 
 ### 配置说明
@@ -50,6 +51,13 @@ docker compose down
 #### 1. 115open
 
 > 115open token 需要通过命令行设置
+
+```bash
+docker exec -it cinexus-emby-proxy bash
+
+# 进入容器后
+./cinexus token set --refresh-token "xxxx" --access-token "xxx"
+```
 
 > 进入 Docker 容器内执行 `./cinexus token set --refresh-token "xxxx" --access-token "xxx"` 设置 Token
 
