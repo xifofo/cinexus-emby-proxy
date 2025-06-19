@@ -46,10 +46,10 @@ func ProxyPlay(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config,
 		log.Infof("【EMBY PROXY】ProxyPlay 执行时间: %v", duration)
 	}()
 
-	return proxyPlayInternal(c, proxy, cfg, log)
+	return proxyPlayInternal(c, cfg, log)
 }
 
-func proxyPlayInternal(c echo.Context, proxy *httputil.ReverseProxy, cfg *config.Config, log *logger.Logger) (string, bool) {
+func proxyPlayInternal(c echo.Context, cfg *config.Config, log *logger.Logger) (string, bool) {
 	stepStart := time.Now()
 
 	itemInfoUri, itemId, etag, mediaSourceId, apiKey := helper.GetItemPathInfo(c, cfg)
