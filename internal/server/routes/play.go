@@ -102,8 +102,6 @@ func proxyPlayInternal(c echo.Context, cfg *config.Config, log *logger.Logger) (
 
 	log.Debugf("【EMBY PROXY】步骤3 - 路径匹配检查耗时: %v", time.Since(stepStart))
 
-	// TODO 优先从数据库里获取 pickcode
-
 	if cfg.Proxy.Method == "alist" {
 		embyPlayPath = strings.Replace(embyPlayPath, matchPathConfig.Old, matchPathConfig.New, 1)
 
@@ -336,6 +334,13 @@ func Get115OpenRedirectURL(c echo.Context, embyPath string, log *logger.Logger, 
 		log.Errorf("[Get115OpenRedirectURL] 获取 115 文件 PickCode 失败: %v", err)
 		return GetAlistRedirectURL(strings.Replace(embyPath, matchPathConfig.Old, matchPathConfig.New, 1), log, cfg, originalHeaders)
 	}
+
+	go func() {
+		err = storage.SavePickcodeToCache(embyRealCloudPlayPath, resp.PickCode)
+		if err != nil {
+			log.Warnf("保存 pickcode 到缓存失败: %v", err)
+		}
+	}()
 
 	downloadUrlResp, err := sdk115Client.DownURL(context.Background(), resp.PickCode, c.Request().UserAgent())
 	if err != nil {
