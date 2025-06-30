@@ -28,6 +28,9 @@ proxy:
 driver115:
   cookie: "UID=your_uid_here;CID=your_cid_here;SEID=your_seid_here;KID=your_kid_here"
 
+open115:
+  client_id: "your_open115_client_id_here"
+
 # 使用 alist 直链时，需要配置以下参数
 alist:
   url: "http://127.0.0.1:5244"

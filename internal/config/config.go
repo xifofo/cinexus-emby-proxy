@@ -15,6 +15,7 @@ type Config struct {
 	Log       LogConfig       `mapstructure:"log"`
 	Alist     AlistConfig     `mapstructure:"alist"`
 	Driver115 Driver115Config `mapstructure:"driver115"`
+	Open115   Open115Config   `mapstructure:"open115"`
 }
 
 // ServerConfig 保存服务器配置
@@ -62,6 +63,10 @@ type LogConfig struct {
 
 type Driver115Config struct {
 	Cookie string `mapstructure:"cookie"`
+}
+
+type Open115Config struct {
+	ClientID string `mapstructure:"client_id"`
 }
 
 // Load 从各种来源加载配置
