@@ -1,6 +1,9 @@
 server:
   port: "9096"
   mode: "debug" # debug, release
+  # 处理新增媒体事件，如果为 false，则不处理 Emby 新增媒体事件
+  # 需要配置 Emby Webhook 的 URL 为 http://<server_ip>:<port>/cinexus-api/webhook/emby
+  process_new_media: false
 
 proxy:
   url: "http://127.0.0.1:8096"

@@ -46,6 +46,9 @@ func New(cfg *config.Config, log *logger.Logger) *Server {
 	// 初始化pickcode缓存数据库
 	s.setupPickcodeCache()
 
+	// 初始化任务队列
+	s.setupTaskQueue()
+
 	// 初始化并启动token刷新器
 	s.setupTokenRefresher()
 
@@ -165,6 +168,30 @@ func (s *Server) customErrorHandler(err error, c echo.Context) {
 	}
 }
 
+// setupTaskQueue 初始化任务队列
+func (s *Server) setupTaskQueue() {
+	s.logger.Info("🔄 正在初始化任务队列...")
+
+	// 创建回调函数包装器
+	playbackCallback := func(itemID string, cfg *config.Config) error {
+		_, err := routes.GETPlaybackInfo(itemID, cfg)
+		return err
+	}
+
+	// 创建并启动任务队列
+	taskQueue := storage.NewPersistentTaskQueue(s.config, s.logger, playbackCallback)
+	if taskQueue != nil {
+		s.logger.Info("✅ 任务队列初始化成功")
+
+		// 获取队列状态
+		if status, err := taskQueue.GetQueueStatus(); err == nil {
+			s.logger.Infof("📊 当前任务队列状态: %+v", status)
+		}
+	} else {
+		s.logger.Error("❌ 任务队列初始化失败")
+	}
+}
+
 // Start 启动服务器
 func (s *Server) Start(address string) error {
 	return s.echo.Start(address)
@@ -173,6 +200,13 @@ func (s *Server) Start(address string) error {
 // Shutdown 优雅地关闭服务器
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("🔄 开始关闭服务器组件...")
+
+	// 停止任务队列
+	if taskQueue := storage.GetTaskQueue(); taskQueue != nil {
+		s.logger.Info("🛑 正在停止任务队列...")
+		taskQueue.Stop()
+		s.logger.Info("✅ 任务队列已停止")
+	}
 
 	// 停止token刷新器
 	if s.tokenRefresher != nil {

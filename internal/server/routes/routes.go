@@ -50,6 +50,12 @@ func Setup(e *echo.Echo, cfg *config.Config, log *logger.Logger) {
 		return nil
 	})
 
+	cinexusAPI := e.Group("/cinexus-api")
+	webhook := cinexusAPI.Group("/webhook")
+
+	webhook.POST("/emby", func(c echo.Context) error {
+		return HandleEmbyWebhook(c, cfg, log)
+	})
 }
 
 type SimpleStartInfo struct {

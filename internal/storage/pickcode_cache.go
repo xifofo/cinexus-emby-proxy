@@ -1,13 +1,7 @@
 package storage
 
 import (
-	"path/filepath"
-	"sync"
 	"time"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // PickcodeCache 表示 pickcode 缓存的数据库模型
@@ -19,46 +13,17 @@ type PickcodeCache struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-var (
-	db     *gorm.DB
-	dbOnce sync.Once
-	dbErr  error
-)
-
 // InitPickcodeDB 初始化 pickcode 缓存数据库
 func InitPickcodeDB() error {
-	dbOnce.Do(func() {
-		// 确保数据目录存在
-		if err := EnsureDataDir(); err != nil {
-			dbErr = err
-			return
-		}
-
-		// 数据库文件路径
-		dbPath := filepath.Join(DataDir, "pickcode_cache.db")
-
-		// 打开数据库连接
-		db, dbErr = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Silent), // 静默模式，避免过多日志
-		})
-
-		if dbErr != nil {
-			return
-		}
-
-		// 自动迁移表结构
-		dbErr = db.AutoMigrate(&PickcodeCache{})
-	})
-
-	return dbErr
+	// 使用统一的数据库初始化
+	return InitDB()
 }
 
 // GetPickcodeFromCache 从缓存中获取 pickcode
 func GetPickcodeFromCache(filePath string) (string, bool) {
+	db := GetDB()
 	if db == nil {
-		if err := InitPickcodeDB(); err != nil {
-			return "", false
-		}
+		return "", false
 	}
 
 	var cache PickcodeCache
@@ -73,10 +38,9 @@ func GetPickcodeFromCache(filePath string) (string, bool) {
 
 // SavePickcodeToCache 保存 pickcode 到缓存
 func SavePickcodeToCache(filePath, pickcode string) error {
+	db := GetDB()
 	if db == nil {
-		if err := InitPickcodeDB(); err != nil {
-			return err
-		}
+		return InitDB()
 	}
 
 	cache := PickcodeCache{
@@ -100,10 +64,9 @@ func SavePickcodeToCache(filePath, pickcode string) error {
 
 // DeletePickcodeFromCache 从缓存中删除 pickcode
 func DeletePickcodeFromCache(filePath string) error {
+	db := GetDB()
 	if db == nil {
-		if err := InitPickcodeDB(); err != nil {
-			return err
-		}
+		return InitDB()
 	}
 
 	return db.Where("file_path = ?", filePath).Delete(&PickcodeCache{}).Error
@@ -111,10 +74,9 @@ func DeletePickcodeFromCache(filePath string) error {
 
 // ClearPickcodeCache 清空所有 pickcode 缓存
 func ClearPickcodeCache() error {
+	db := GetDB()
 	if db == nil {
-		if err := InitPickcodeDB(); err != nil {
-			return err
-		}
+		return InitDB()
 	}
 
 	return db.Exec("DELETE FROM pickcode_caches").Error
@@ -122,8 +84,9 @@ func ClearPickcodeCache() error {
 
 // GetPickcodeCacheStats 获取缓存统计信息
 func GetPickcodeCacheStats() (int64, error) {
+	db := GetDB()
 	if db == nil {
-		if err := InitPickcodeDB(); err != nil {
+		if err := InitDB(); err != nil {
 			return 0, err
 		}
 	}

@@ -20,8 +20,9 @@ type Config struct {
 
 // ServerConfig 保存服务器配置
 type ServerConfig struct {
-	Port string `mapstructure:"port"`
-	Mode string `mapstructure:"mode"` // debug, release
+	Port            string `mapstructure:"port"`
+	Mode            string `mapstructure:"mode"`              // debug, release
+	ProcessNewMedia bool   `mapstructure:"process_new_media"` // 是否处理新增媒体事件
 }
 
 // ProxyConfig 保存代理配置
@@ -119,6 +120,7 @@ func setDefaults() {
 	// 服务器默认值
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("server.process_new_media", false) // 默认不处理新增媒体事件
 
 	// 代理默认值
 	viper.SetDefault("proxy.url", "")
