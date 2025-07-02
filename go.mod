@@ -6,6 +6,7 @@ toolchain go1.23.9
 
 require (
 	github.com/SheltonZhu/115driver v1.0.37
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -24,7 +25,6 @@ require (
 	github.com/aead/ecdh v0.2.0 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible // indirect
 	github.com/andreburgaud/crypt2go v1.1.0 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect

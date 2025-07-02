@@ -10,12 +10,13 @@ import (
 
 // Config 保存应用程序的所有配置
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server"`
-	Proxy     ProxyConfig     `mapstructure:"proxy"`
-	Log       LogConfig       `mapstructure:"log"`
-	Alist     AlistConfig     `mapstructure:"alist"`
-	Driver115 Driver115Config `mapstructure:"driver115"`
-	Open115   Open115Config   `mapstructure:"open115"`
+	Server      ServerConfig       `mapstructure:"server"`
+	Proxy       ProxyConfig        `mapstructure:"proxy"`
+	Log         LogConfig          `mapstructure:"log"`
+	Alist       AlistConfig        `mapstructure:"alist"`
+	Driver115   Driver115Config    `mapstructure:"driver115"`
+	Open115     Open115Config      `mapstructure:"open115"`
+	FileWatcher FileWatcherConfigs `mapstructure:"file_watcher"`
 }
 
 // ServerConfig 保存服务器配置
@@ -70,6 +71,23 @@ type Open115Config struct {
 	ClientID string `mapstructure:"client_id"`
 }
 
+// FileWatcherConfigs 保存文件监控配置
+type FileWatcherConfigs struct {
+	Enabled bool                `mapstructure:"enabled"` // 是否启用文件监控功能
+	Configs []FileWatcherConfig `mapstructure:"configs"` // 多个监控配置
+}
+
+// FileWatcherConfig 保存单个文件监控配置
+type FileWatcherConfig struct {
+	Name       string   `mapstructure:"name"`        // 监控配置名称
+	SourceDir  string   `mapstructure:"source_dir"`  // 监控的源目录
+	TargetDir  string   `mapstructure:"target_dir"`  // 目标复制目录
+	Extensions []string `mapstructure:"extensions"`  // 监控的文件扩展名，空表示所有文件
+	Recursive  bool     `mapstructure:"recursive"`   // 是否递归监控子目录
+	CopyMode   string   `mapstructure:"copy_mode"`   // 复制模式: copy(复制), move(移动), link(硬链接)
+	CreateDirs bool     `mapstructure:"create_dirs"` // 是否自动创建目标目录
+}
+
 // Load 从各种来源加载配置
 func Load() *Config {
 	// 设置默认值
@@ -112,6 +130,28 @@ func validateConfig(cfg *Config) error {
 		}
 	}
 
+	// 验证文件监控配置
+	if cfg.FileWatcher.Enabled {
+		if len(cfg.FileWatcher.Configs) == 0 {
+			return fmt.Errorf("启用文件监控时，至少需要配置一个监控项")
+		}
+
+		for i, watcherCfg := range cfg.FileWatcher.Configs {
+			if watcherCfg.SourceDir == "" {
+				return fmt.Errorf("第%d个监控配置的source_dir不能为空", i+1)
+			}
+			if watcherCfg.TargetDir == "" {
+				return fmt.Errorf("第%d个监控配置的target_dir不能为空", i+1)
+			}
+			if watcherCfg.CopyMode != "" {
+				if watcherCfg.CopyMode != "copy" && watcherCfg.CopyMode != "move" && watcherCfg.CopyMode != "link" {
+					return fmt.Errorf("第%d个监控配置的copy_mode必须是 copy, move 或 link 之一", i+1)
+				}
+			}
+			log.Printf("文件监控配置[%s]已启用: %s -> %s", watcherCfg.Name, watcherCfg.SourceDir, watcherCfg.TargetDir)
+		}
+	}
+
 	return nil
 }
 
@@ -127,6 +167,10 @@ func setDefaults() {
 	viper.SetDefault("proxy.api_key", "")
 	viper.SetDefault("proxy.cache_time", 1)        // 缓存直链时间，单位：小时
 	viper.SetDefault("proxy.cache_pickcode", true) // 默认启用pickcode缓存
+
+	// 文件监控默认值
+	viper.SetDefault("file_watcher.enabled", false)
+	viper.SetDefault("file_watcher.configs", []map[string]interface{}{})
 
 	// 日志默认值
 	viper.SetDefault("log.level", "info")

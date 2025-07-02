@@ -49,3 +49,14 @@ log:
   max_backups: 0 # 0 means no limit
   max_age: 7 # days
   compress: true # compress old log files
+
+file_watcher:
+  enabled: true # 是否启用文件监控功能
+  configs: # 多个监控配置，可以监控不同的目录
+    - name: "download-to-115" # 监控配置名称（用于日志标识）
+      source_dir: "/temp" # 监控的源目录
+      target_dir: "/temp2" # 目标复制目录
+      extensions: [".mp4", ".mkv", ".avi", ".m4v", ".mov", ".wmv", ".flv", ".mpg", ".mpeg", ".rm", ".rmvb", ".vob", ".ts", ".tp"] # 只监控视频文件
+      recursive: true # 是否递归监控子目录
+      copy_mode: "copy" # 复制模式：copy(复制), move(移动), link(硬链接)
+      create_dirs: true # 是否自动创建目标目录

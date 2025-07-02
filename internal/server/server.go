@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cinexus/internal/config"
+	"cinexus/internal/filewatcher"
 	"cinexus/internal/logger"
 	"cinexus/internal/server/routes"
 	"cinexus/internal/storage"
@@ -21,6 +22,7 @@ type Server struct {
 	config         *config.Config
 	logger         *logger.Logger
 	tokenRefresher *tokenrefresher.TokenRefresher
+	fileWatcher    *filewatcher.FileWatcherManager
 }
 
 // New 创建新的服务器实例
@@ -51,6 +53,9 @@ func New(cfg *config.Config, log *logger.Logger) *Server {
 
 	// 初始化并启动token刷新器
 	s.setupTokenRefresher()
+
+	// 初始化并启动文件监控器
+	s.setupFileWatcher()
 
 	return s
 }
@@ -156,7 +161,7 @@ func (s *Server) customErrorHandler(err error, c echo.Context) {
 		if c.Request().Method == http.MethodHead {
 			err = c.NoContent(code)
 		} else {
-			err = c.JSON(code, map[string]interface{}{
+			err = c.JSON(code, map[string]any{
 				"error":      message,
 				"status":     code,
 				"request_id": c.Response().Header().Get(echo.HeaderXRequestID),
@@ -191,6 +196,33 @@ func (s *Server) setupTaskQueue() {
 	}
 }
 
+// setupFileWatcher 设置文件监控器
+func (s *Server) setupFileWatcher() {
+	if !s.config.FileWatcher.Enabled {
+		s.logger.Info("⚠️ 文件监控功能已禁用")
+		return
+	}
+
+	s.logger.Info("🔍 正在初始化文件监控管理器...")
+
+	// 创建文件监控管理器
+	manager, err := filewatcher.NewFileWatcherManager(&s.config.FileWatcher, s.logger.Logger)
+	if err != nil {
+		s.logger.Errorf("❌ 创建文件监控管理器失败: %v", err)
+		return
+	}
+
+	s.fileWatcher = manager
+
+	// 启动文件监控管理器
+	if err := s.fileWatcher.Start(); err != nil {
+		s.logger.Errorf("❌ 启动文件监控管理器失败: %v", err)
+		return
+	}
+
+	s.logger.Info("✅ 文件监控管理器初始化并启动成功")
+}
+
 // Start 启动服务器
 func (s *Server) Start(address string) error {
 	return s.echo.Start(address)
@@ -199,6 +231,16 @@ func (s *Server) Start(address string) error {
 // Shutdown 优雅地关闭服务器
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("🔄 开始关闭服务器组件...")
+
+	// 停止文件监控管理器
+	if s.fileWatcher != nil {
+		s.logger.Info("🛑 正在停止文件监控管理器...")
+		if err := s.fileWatcher.Stop(); err != nil {
+			s.logger.Errorf("❌ 停止文件监控管理器失败: %v", err)
+		} else {
+			s.logger.Info("✅ 文件监控管理器已停止")
+		}
+	}
 
 	// 停止任务队列
 	if taskQueue := storage.GetTaskQueue(); taskQueue != nil {
