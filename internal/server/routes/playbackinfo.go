@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func GETPlaybackInfo(itemID string, cfg *config.Config) (response map[string]any, err error) {
+func GETPlaybackInfo(itemID string, cfg *config.Config) (err error) {
 	url := fmt.Sprintf("%s/emby/Items/%s/PlaybackInfo?MaxStreamingBitrate=42000000&api_key=%s",
 		cfg.Proxy.URL,
 		itemID,
@@ -21,36 +21,30 @@ func GETPlaybackInfo(itemID string, cfg *config.Config) (response map[string]any
 	req, err := http.NewRequest(method, url, nil)
 
 	if err != nil {
-		return response, err
+		return err
 	}
 	req.Header.Add("accept", "application/json")
 
 	res, err := client.Do(req)
 	if err != nil {
-		return response, err
+		return err
 	}
 	defer res.Body.Close()
 
 	bb, err := io.ReadAll(res.Body)
 	if err != nil {
-		return response, err
+		return err
 	}
 
 	var resp map[string]any
 	err = json.Unmarshal(bb, &resp)
 	if err != nil {
-		return response, err
+		return err
 	}
 
 	if len(resp["MediaSources"].([]any)) == 0 {
-		return response, fmt.Errorf("MediaSources not found or empty")
+		return fmt.Errorf("MediaSources not found or empty")
 	}
 
-	for _, item := range resp["MediaSources"].([]any) {
-		if item.(map[string]any)["ItemId"] == itemID {
-			return item.(map[string]any), nil
-		}
-	}
-
-	return response, fmt.Errorf("请求错误")
+	return fmt.Errorf("请求错误")
 }

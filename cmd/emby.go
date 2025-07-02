@@ -55,7 +55,7 @@ var refreshMediaCmd = &cobra.Command{
 
 		// 创建任务队列
 		playbackCallback := func(itemID string, cfg *config.Config) error {
-			_, err := routes.GETPlaybackInfo(itemID, cfg)
+			err := routes.GETPlaybackInfo(itemID, cfg)
 			return err
 		}
 		taskQueue := storage.NewPersistentTaskQueue(cfg, log, playbackCallback)

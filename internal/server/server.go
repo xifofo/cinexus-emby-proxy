@@ -174,8 +174,7 @@ func (s *Server) setupTaskQueue() {
 
 	// 创建回调函数包装器
 	playbackCallback := func(itemID string, cfg *config.Config) error {
-		_, err := routes.GETPlaybackInfo(itemID, cfg)
-		return err
+		return routes.GETPlaybackInfo(itemID, cfg)
 	}
 
 	// 创建并启动任务队列
