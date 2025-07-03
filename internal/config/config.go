@@ -79,13 +79,14 @@ type FileWatcherConfigs struct {
 
 // FileWatcherConfig 保存单个文件监控配置
 type FileWatcherConfig struct {
-	Name       string   `mapstructure:"name"`        // 监控配置名称
-	SourceDir  string   `mapstructure:"source_dir"`  // 监控的源目录
-	TargetDir  string   `mapstructure:"target_dir"`  // 目标复制目录
-	Extensions []string `mapstructure:"extensions"`  // 监控的文件扩展名，空表示所有文件
-	Recursive  bool     `mapstructure:"recursive"`   // 是否递归监控子目录
-	CopyMode   string   `mapstructure:"copy_mode"`   // 复制模式: copy(复制), move(移动), link(硬链接)
-	CreateDirs bool     `mapstructure:"create_dirs"` // 是否自动创建目标目录
+	Name                 string   `mapstructure:"name"`                   // 监控配置名称
+	SourceDir            string   `mapstructure:"source_dir"`             // 监控的源目录
+	TargetDir            string   `mapstructure:"target_dir"`             // 目标复制目录
+	Extensions           []string `mapstructure:"extensions"`             // 监控的文件扩展名，空表示所有文件
+	Recursive            bool     `mapstructure:"recursive"`              // 是否递归监控子目录
+	CopyMode             string   `mapstructure:"copy_mode"`              // 复制模式: copy(复制), move(移动), link(硬链接)
+	CreateDirs           bool     `mapstructure:"create_dirs"`            // 是否自动创建目标目录
+	ProcessExistingFiles bool     `mapstructure:"process_existing_files"` // 是否在启动时处理已存在的文件
 }
 
 // Load 从各种来源加载配置

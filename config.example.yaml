@@ -60,3 +60,4 @@ file_watcher:
       recursive: true # 是否递归监控子目录
       copy_mode: "copy" # 复制模式：copy(复制), move(移动), link(硬链接)
       create_dirs: true # 是否自动创建目标目录
+      process_existing_files: false # 是否在启动时处理已存在的文件

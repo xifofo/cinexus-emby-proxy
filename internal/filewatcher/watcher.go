@@ -175,10 +175,21 @@ func (fw *FileWatcher) Start() error {
 
 	go fw.watchLoop()
 
-	// 启动后处理源目录中已存在的文件
-	fw.processExistingFilesInDir(fw.config.SourceDir)
-
 	fw.logger.Infof("文件监控器[%s]已启动，监控目录: %s -> %s", fw.config.Name, fw.config.SourceDir, fw.config.TargetDir)
+
+	// 只有在配置允许时才处理已存在的文件
+	if fw.config.ProcessExistingFiles {
+		// 启动后延迟处理源目录中已存在的文件，确保监控器完全就绪
+		go func() {
+			// 等待1秒确保监控器完全初始化
+			time.Sleep(1 * time.Second)
+			fw.logger.Infof("监控器[%s]开始初始扫描处理已存在的文件", fw.config.Name)
+			fw.processExistingFilesInDir(fw.config.SourceDir)
+		}()
+	} else {
+		fw.logger.Infof("监控器[%s]跳过处理已存在文件（配置已禁用）", fw.config.Name)
+	}
+
 	return nil
 }
 
@@ -274,8 +285,12 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) {
 			} else {
 				fw.logger.Debugf("监控器[%s]添加新目录监控: %s", fw.config.Name, event.Name)
 
-				// 检查新添加的目录中是否已有符合条件的文件
-				fw.processExistingFilesInDir(event.Name)
+				// 只有在配置允许时才检查新添加的目录中是否已有符合条件的文件
+				if fw.config.ProcessExistingFiles {
+					fw.processExistingFilesInDir(event.Name)
+				} else {
+					fw.logger.Debugf("监控器[%s]跳过处理新目录中已存在的文件（配置已禁用）: %s", fw.config.Name, event.Name)
+				}
 			}
 		}
 		return
@@ -304,41 +319,57 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) {
 func (fw *FileWatcher) processExistingFilesInDir(dirPath string) {
 	// 异步处理，避免阻塞主监控循环
 	go func() {
-		fw.logger.Debugf("监控器[%s]开始检查目录中已存在的文件: %s", fw.config.Name, dirPath)
+		fw.logger.Infof("监控器[%s]开始检查目录中已存在的文件: %s", fw.config.Name, dirPath)
+
+		var processedCount int
+		var skippedCount int
+		var errorCount int
 
 		err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				fw.logger.Warnf("监控器[%s]遍历目录失败: %s, 错误: %v", fw.config.Name, path, err)
+				errorCount++
 				return nil // 继续处理其他文件
 			}
 
 			// 跳过目录
 			if info.IsDir() {
+				fw.logger.Debugf("监控器[%s]跳过目录: %s", fw.config.Name, path)
 				return nil
 			}
 
+			fw.logger.Debugf("监控器[%s]检查文件: %s", fw.config.Name, path)
+
 			// 检查文件扩展名
 			if !fw.shouldProcessFile(path) {
+				fw.logger.Debugf("监控器[%s]文件扩展名不匹配，跳过: %s", fw.config.Name, path)
+				skippedCount++
 				return nil
 			}
 
 			// 检查文件是否已经存在于目标位置
 			if fw.isFileAlreadyProcessed(path) {
 				fw.logger.Debugf("监控器[%s]文件已存在于目标位置，跳过: %s", fw.config.Name, path)
+				skippedCount++
 				return nil
 			}
+
+			fw.logger.Debugf("监控器[%s]准备处理文件: %s", fw.config.Name, path)
 
 			// 等待文件写入完成
 			if err := fw.waitForFileReady(path); err != nil {
 				fw.logger.Warnf("监控器[%s]等待文件就绪失败: %s, 错误: %v", fw.config.Name, path, err)
+				errorCount++
 				return nil
 			}
 
 			// 处理文件
 			if err := fw.processFile(path); err != nil {
 				fw.logger.Errorf("监控器[%s]处理已存在文件失败: %s, 错误: %v", fw.config.Name, path, err)
+				errorCount++
 			} else {
 				fw.logger.Infof("监控器[%s]成功处理已存在文件: %s", fw.config.Name, path)
+				processedCount++
 			}
 
 			return nil
@@ -347,7 +378,8 @@ func (fw *FileWatcher) processExistingFilesInDir(dirPath string) {
 		if err != nil {
 			fw.logger.Errorf("监控器[%s]遍历目录失败: %s, 错误: %v", fw.config.Name, dirPath, err)
 		} else {
-			fw.logger.Debugf("监控器[%s]完成检查目录中已存在的文件: %s", fw.config.Name, dirPath)
+			fw.logger.Infof("监控器[%s]完成检查目录: %s，处理了 %d 个文件，跳过 %d 个文件，%d 个错误",
+				fw.config.Name, dirPath, processedCount, skippedCount, errorCount)
 		}
 	}()
 }
@@ -357,17 +389,44 @@ func (fw *FileWatcher) isFileAlreadyProcessed(sourcePath string) bool {
 	// 计算目标路径
 	relPath, err := filepath.Rel(fw.config.SourceDir, sourcePath)
 	if err != nil {
+		fw.logger.Debugf("监控器[%s]计算相对路径失败: %s, 错误: %v", fw.config.Name, sourcePath, err)
 		return false
 	}
 
 	targetPath := filepath.Join(fw.config.TargetDir, relPath)
+	fw.logger.Debugf("监控器[%s]检查目标文件是否存在: %s", fw.config.Name, targetPath)
 
 	// 检查目标文件是否存在
-	if _, err := os.Stat(targetPath); err == nil {
-		return true // 目标文件已存在
+	targetInfo, err := os.Stat(targetPath)
+	if err != nil {
+		fw.logger.Debugf("监控器[%s]目标文件不存在: %s, 错误: %v", fw.config.Name, targetPath, err)
+		return false // 目标文件不存在
 	}
 
-	return false // 目标文件不存在
+	// 获取源文件信息
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		fw.logger.Debugf("监控器[%s]获取源文件信息失败: %s, 错误: %v", fw.config.Name, sourcePath, err)
+		return false
+	}
+
+	// 比较文件大小
+	if targetInfo.Size() != sourceInfo.Size() {
+		fw.logger.Debugf("监控器[%s]文件大小不匹配，需要重新处理: 源文件=%d, 目标文件=%d",
+			fw.config.Name, sourceInfo.Size(), targetInfo.Size())
+		return false
+	}
+
+	// 比较修改时间（允许1秒的误差）
+	timeDiff := targetInfo.ModTime().Sub(sourceInfo.ModTime())
+	if timeDiff < -1*time.Second || timeDiff > 1*time.Second {
+		fw.logger.Debugf("监控器[%s]文件修改时间不匹配，需要重新处理: 源文件=%v, 目标文件=%v",
+			fw.config.Name, sourceInfo.ModTime(), targetInfo.ModTime())
+		return false
+	}
+
+	fw.logger.Debugf("监控器[%s]目标文件已存在且匹配: %s", fw.config.Name, targetPath)
+	return true // 目标文件已存在且匹配
 }
 
 // shouldProcessFile 检查是否应该处理此文件
