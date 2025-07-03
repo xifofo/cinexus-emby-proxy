@@ -46,5 +46,5 @@ func GETPlaybackInfo(itemID string, cfg *config.Config) (err error) {
 		return fmt.Errorf("MediaSources not found or empty")
 	}
 
-	return fmt.Errorf("请求错误")
+	return nil
 }
