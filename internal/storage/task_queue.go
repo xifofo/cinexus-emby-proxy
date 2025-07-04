@@ -226,16 +226,25 @@ func (q *PersistentTaskQueue) executeTask(task *MediaTask) {
 		q.executing = false
 	}()
 
-	q.log.Infof("开始处理任务: TaskID=%d, ItemID=%s", task.ID, task.ItemID)
+	q.log.Infof("🔄 开始处理媒体任务: TaskID=%d, ItemID=%s", task.ID, task.ItemID)
 
-	// 这里需要引入 GETPlaybackInfo 函数
-	// 为了避免循环依赖，我们通过接口或者回调函数的方式
+	// 记录任务开始时间
+	startTime := time.Now()
+
+	// 调用播放信息处理函数
 	err := q.callGETPlaybackInfo(task.ItemID)
+
+	// 计算执行时间
+	executionTime := time.Since(startTime)
+	q.log.Infof("⏱️ 任务执行时间: TaskID=%d, ItemID=%s, 耗时: %v", task.ID, task.ItemID, executionTime)
 
 	now := time.Now()
 	if err != nil {
 		// 任务失败，增加重试次数
 		task.Retries++
+		q.log.Warnf("❌ 任务执行失败: TaskID=%d, ItemID=%s, 重试次数: %d, 错误: %v",
+			task.ID, task.ItemID, task.Retries, err)
+
 		if task.Retries >= 3 {
 			// 超过重试次数，标记为失败
 			q.db.Model(task).Updates(MediaTask{
@@ -243,8 +252,8 @@ func (q *PersistentTaskQueue) executeTask(task *MediaTask) {
 				CompletedAt: &now,
 				ErrorMsg:    err.Error(),
 			})
-			q.log.Errorf("任务失败(超过重试次数): TaskID=%d, ItemID=%s, 错误: %v",
-				task.ID, task.ItemID, err)
+			q.log.Errorf("💀 任务失败(超过重试次数): TaskID=%d, ItemID=%s, 总重试次数: %d, 最终错误: %v",
+				task.ID, task.ItemID, task.Retries, err)
 		} else {
 			// 重新标记为待处理，稍后重试
 			q.db.Model(task).Updates(MediaTask{
@@ -252,8 +261,8 @@ func (q *PersistentTaskQueue) executeTask(task *MediaTask) {
 				ErrorMsg: err.Error(),
 				Retries:  task.Retries,
 			})
-			q.log.Warnf("任务失败，将重试: TaskID=%d, ItemID=%s, 重试次数: %d, 错误: %v",
-				task.ID, task.ItemID, task.Retries, err)
+			q.log.Infof("🔄 任务将重试: TaskID=%d, ItemID=%s, 当前重试次数: %d/%d",
+				task.ID, task.ItemID, task.Retries, 3)
 		}
 	} else {
 		// 任务成功
@@ -261,18 +270,26 @@ func (q *PersistentTaskQueue) executeTask(task *MediaTask) {
 			Status:      TaskStatusCompleted,
 			CompletedAt: &now,
 		})
-		q.log.Infof("任务完成: TaskID=%d, ItemID=%s", task.ID, task.ItemID)
+		q.log.Infof("✅ 任务完成: TaskID=%d, ItemID=%s, 执行时间: %v",
+			task.ID, task.ItemID, executionTime)
 	}
 }
 
 // callGETPlaybackInfo 调用 GETPlaybackInfo（需要实现具体逻辑）
 func (q *PersistentTaskQueue) callGETPlaybackInfo(itemID string) error {
-	q.log.Infof("正在处理媒体任务: ItemID=%s", itemID)
+	q.log.Infof("📺 开始处理媒体播放信息: ItemID=%s", itemID)
 
 	if q.playbackCallback != nil {
-		return q.playbackCallback(itemID, q.cfg)
+		err := q.playbackCallback(itemID, q.cfg)
+		if err != nil {
+			q.log.Errorf("❌ 处理媒体播放信息失败: ItemID=%s, 错误: %v", itemID, err)
+			return err
+		}
+		q.log.Infof("✅ 媒体播放信息处理成功: ItemID=%s", itemID)
+		return nil
 	}
 
+	q.log.Warnf("⚠️ 未设置播放信息回调函数: ItemID=%s", itemID)
 	return nil // 如果没有回调函数，返回 nil
 }
 

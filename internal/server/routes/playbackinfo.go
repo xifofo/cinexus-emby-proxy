@@ -2,49 +2,28 @@ package routes
 
 import (
 	"cinexus/internal/config"
-	"encoding/json"
+	"cinexus/internal/helper/emby"
 	"fmt"
-	"io"
-	"net/http"
 )
 
-func GETPlaybackInfo(itemID string, cfg *config.Config) (err error) {
-	url := fmt.Sprintf("%s/emby/Items/%s/PlaybackInfo?MaxStreamingBitrate=42000000&api_key=%s",
-		cfg.Proxy.URL,
-		itemID,
-		cfg.Proxy.APIKey,
-	)
+// GETPlaybackInfo 获取播放信息，使用新的emby客户端方法
+func GETPlaybackInfo(itemID string, cfg *config.Config) error {
+	// 创建emby客户端
+	embyClient := emby.New(cfg)
 
-	method := "GET"
-
-	client := &http.Client{}
-	req, err := http.NewRequest(method, url, nil)
-
+	// 使用新的GetPlaybackInfo方法获取媒体源信息
+	mediaSources, err := embyClient.GetPlaybackInfo(itemID)
 	if err != nil {
-		return err
-	}
-	req.Header.Add("accept", "application/json")
-
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	bb, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
+		return fmt.Errorf("获取播放信息失败: %w", err)
 	}
 
-	var resp map[string]any
-	err = json.Unmarshal(bb, &resp)
-	if err != nil {
-		return err
-	}
-
-	if len(resp["MediaSources"].([]any)) == 0 {
+	// 检查是否有媒体源
+	if len(mediaSources) == 0 {
 		return fmt.Errorf("MediaSources not found or empty")
 	}
+
+	// 记录成功获取的信息
+	fmt.Printf("媒体播放信息获取成功: ItemID=%s, MediaSources数量=%d\n", itemID, len(mediaSources))
 
 	return nil
 }
