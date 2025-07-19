@@ -285,12 +285,7 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) {
 			} else {
 				fw.logger.Debugf("监控器[%s]添加新目录监控: %s", fw.config.Name, event.Name)
 
-				// 只有在配置允许时才检查新添加的目录中是否已有符合条件的文件
-				if fw.config.ProcessExistingFiles {
-					fw.processExistingFilesInDir(event.Name)
-				} else {
-					fw.logger.Debugf("监控器[%s]跳过处理新目录中已存在的文件（配置已禁用）: %s", fw.config.Name, event.Name)
-				}
+				fw.processExistingFilesInDir(event.Name)
 			}
 		}
 		return
