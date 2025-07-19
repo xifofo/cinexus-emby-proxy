@@ -1,6 +1,11 @@
 # Cinexus Emby Proxy
 
-一个高性能的 Emby 媒体服务器代理工具，支持 Alist、115Open
+一个高性能的 Emby 媒体服务器代理工具，支持 115Open
+
+## TODO
+
+- [ ] 新增支持目录清除 PICKCODE 缓存
+- [ ] 支持 OListOpenList
 
 ## Docker 部署指南
 
